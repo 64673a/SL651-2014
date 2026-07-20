@@ -36,6 +36,8 @@ const rtuForm = reactive({
   rain: 1.5,
   voltage: 12.6,
 });
+const rtuHex = ref("");
+const rtuSending = ref(false);
 const rtuMsg = ref("未启动");
 
 const modeItems = [
@@ -181,6 +183,22 @@ async function rtuSend(kind) {
   if (!r.ok) toast.add({ title: r.error || "失败", color: "error" });
   else toast.add({ title: `已发送 ${kind}`, color: "success" });
 }
+
+async function rtuSendHex() {
+  const hex = (rtuHex.value || "").trim();
+  if (!hex) {
+    toast.add({ title: "请输入自定义 Hex", color: "warning" });
+    return;
+  }
+  rtuSending.value = true;
+  try {
+    const r = await post("/api/rtu/send", { kind: "hex", hex });
+    if (!r.ok) toast.add({ title: r.error || "发送失败", color: "error" });
+    else toast.add({ title: "自定义 Hex 已发送", color: "success" });
+  } finally {
+    rtuSending.value = false;
+  }
+}
 </script>
 
 <template>
@@ -265,7 +283,13 @@ async function rtuSend(kind) {
             <UInput v-model="down.password" />
           </UFormField>
           <UFormField label="正文 Hex">
-            <UTextarea v-model="down.body_hex" :rows="2" placeholder="可选" class="font-mono text-xs" />
+            <UTextarea
+              v-model="down.body_hex"
+              :rows="3"
+              placeholder="可选"
+              class="w-full font-mono text-xs"
+              :ui="{ base: 'w-full min-h-[4.5rem]' }"
+            />
           </UFormField>
           <div class="flex gap-2">
             <UButton
@@ -284,7 +308,13 @@ async function rtuSend(kind) {
         </template>
         <template v-else>
           <UFormField label="原始 Hex">
-            <UTextarea v-model="hexRaw" :rows="3" placeholder="7E7E..." class="font-mono text-xs" />
+            <UTextarea
+              v-model="hexRaw"
+              :rows="5"
+              placeholder="7E7E..."
+              class="w-full font-mono text-xs"
+              :ui="{ base: 'w-full min-h-[7rem]' }"
+            />
           </UFormField>
           <UButton color="primary" icon="i-lucide-send" :loading="sending" @click="sendDown">发送 Hex</UButton>
         </template>
@@ -322,6 +352,18 @@ async function rtuSend(kind) {
           <UButton size="sm" color="neutral" variant="outline" @click="rtuSend('report')">发定时报</UButton>
           <UButton size="sm" color="neutral" variant="outline" @click="rtuSend('alarm')">发加报</UButton>
         </div>
+        <UFormField label="自定义上行 Hex">
+          <UTextarea
+            v-model="rtuHex"
+            :rows="5"
+            placeholder="7E7E... 完整帧（含 CRC）"
+            class="w-full font-mono text-xs"
+            :ui="{ base: 'w-full min-h-[7rem]' }"
+          />
+        </UFormField>
+        <UButton color="primary" icon="i-lucide-send" :loading="rtuSending" @click="rtuSendHex">
+          发送 Hex
+        </UButton>
         <p class="text-xs text-muted">{{ rtuMsg }}</p>
       </div>
     </UCard>
@@ -334,7 +376,13 @@ async function rtuSend(kind) {
         </div>
       </template>
       <div class="flex flex-col gap-3">
-        <UTextarea v-model="parseHex" :rows="3" placeholder="粘贴 7E7E... 报文" class="font-mono text-xs" />
+        <UTextarea
+          v-model="parseHex"
+          :rows="4"
+          placeholder="粘贴 7E7E... 报文"
+          class="w-full font-mono text-xs"
+          :ui="{ base: 'w-full min-h-[6rem]' }"
+        />
         <UButton
           color="primary"
           :icon="parseResult ? 'i-lucide-chevrons-up' : 'i-lucide-scan-search'"

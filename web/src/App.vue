@@ -139,8 +139,9 @@ function handleEvent(msg) {
   }
   if (msg.type === "message") {
     const m = msg.data;
-    liveMessages.value.push(m);
-    if (liveMessages.value.length > 300) liveMessages.value.shift();
+    // 最新在上方：新消息插入到数组头部
+    liveMessages.value.unshift(m);
+    if (liveMessages.value.length > 300) liveMessages.value.pop();
     status.stats.total = (status.stats.total || 0) + 1;
     const dir = m.direction;
     if (dir) {
@@ -155,7 +156,7 @@ function handleEvent(msg) {
     return;
   }
   if (msg.type === "system") {
-    liveMessages.value.push({
+    liveMessages.value.unshift({
       id: "sys-" + Date.now(),
       // 本地时区（北京时间），勿用 toISOString（UTC）
       ts: formatLocalTs(),
@@ -164,6 +165,7 @@ function handleEvent(msg) {
       raw_hex: "",
       note: typeof msg.data === "object" ? msg.data.msg || JSON.stringify(msg.data) : String(msg.data),
     });
+    if (liveMessages.value.length > 300) liveMessages.value.pop();
     refreshStatus();
   }
 }
@@ -253,7 +255,7 @@ onUnmounted(() => unsubWs?.());
         </div>
       </header>
 
-      <main class="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-3 p-3 overflow-hidden">
+      <main class="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[480px_minmax(0,1fr)] gap-3 p-3 overflow-hidden">
         <!-- 左：控制面板独立滚动 -->
         <div class="min-h-0 overflow-y-auto overscroll-contain pr-0.5">
           <SidePanel
@@ -346,7 +348,6 @@ onUnmounted(() => unsubWs?.());
                 :messages="history.items"
                 direction="all"
                 :auto-scroll="false"
-                reverse
                 @select="selected = $event"
               />
               <div class="shrink-0 flex items-center justify-between px-3 py-2 border-t border-default">

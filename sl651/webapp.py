@@ -255,8 +255,7 @@ def create_app(center: Optional[CenterHub] = None):
                 elif kind == "alarm":
                     frame = _rtu.send_report(0x33)
                 elif kind == "hex":
-                    _rtu.send_hex(payload.get("hex", ""))
-                    frame = None
+                    frame = _rtu.send_hex(payload.get("hex", ""))
                 else:
                     if "water" in payload:
                         _rtu.water_level = float(payload["water"])

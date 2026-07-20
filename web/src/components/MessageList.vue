@@ -5,12 +5,13 @@ const props = defineProps({
   messages: { type: Array, default: () => [] },
   direction: { type: String, default: "all" },
   peer: { type: String, default: "" },
-  autoScroll: { type: Boolean, default: true },
-  reverse: { type: Boolean, default: false },
+  /** 新消息到达时自动滚到顶部（最新在上方） */
+  autoScroll: { type: Boolean, default: false },
 });
 const emit = defineEmits(["select"]);
 const listEl = ref(null);
 
+/** 统一按时间倒序：最新在上方 */
 const filtered = computed(() => {
   let list = props.messages || [];
   if (props.direction && props.direction !== "all") {
@@ -20,15 +21,16 @@ const filtered = computed(() => {
   if (ip) {
     list = list.filter((m) => (m.peer || "").toLowerCase().includes(ip));
   }
-  return list;
+  return [...list].sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
 });
 
+/** 监听条目数变化：autoScroll 时滚回顶部看最新 */
 watch(
   () => filtered.value.length,
   async () => {
-    if (!props.autoScroll || props.reverse) return;
+    if (!props.autoScroll) return;
     await nextTick();
-    if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight;
+    if (listEl.value) listEl.value.scrollTop = 0;
   }
 );
 
@@ -39,9 +41,9 @@ function dirColor(d) {
 }
 
 function borderClass(d) {
-  if (d === "up") return "border-l-success";
-  if (d === "down") return "border-l-info";
-  return "border-l-warning";
+  if (d === "up") return "border-l-[3px] border-l-success";
+  if (d === "down") return "border-l-[3px] border-l-info";
+  return "";
 }
 
 function summary(m) {
@@ -68,7 +70,7 @@ function crcOk(m) {
 </script>
 
 <template>
-  <div ref="listEl" class="h-full min-h-0 overflow-y-auto overscroll-contain space-y-3 p-3">
+  <div ref="listEl" class="h-full min-h-0 overflow-y-auto overscroll-contain space-y-2 p-3">
     <UEmpty
       v-if="!filtered.length"
       icon="i-lucide-inbox"
@@ -76,7 +78,6 @@ function crcOk(m) {
       description="等待 RTU 上报，或启动模拟 RTU"
     />
 
-    <!-- 不用 flex 子项，避免 UCard 被压缩；space-y 保证条目间距 -->
     <div
       v-for="m in filtered"
       :key="m.id"

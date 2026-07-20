@@ -111,10 +111,14 @@ class SimulatedRtu:
         self.send_frame(frame, f"{func_code:02X} {name} sn={sn}")
         return frame
 
-    def send_hex(self, hex_str: str) -> None:
+    def send_hex(self, hex_str: str) -> bytes:
         from .hexutil import hex_to_bytes
 
-        self.send_frame(hex_to_bytes(hex_str), "自定义")
+        raw = hex_to_bytes(hex_str)
+        if not raw:
+            raise ValueError("hex 为空")
+        self.send_frame(raw, "自定义")
+        return raw
 
     def _recv_loop(self) -> None:
         assert self._sock is not None
