@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import HexMap from "./HexMap.vue";
+import { prettySlimMessage } from "../formatJson";
 
 const props = defineProps({ message: Object });
 const emit = defineEmits(["close"]);
@@ -116,7 +117,8 @@ function fieldHex(f) {
     .join(" ");
 }
 
-const pretty = computed(() => (message.value ? JSON.stringify(message.value, null, 2) : ""));
+// 展示用精简 JSON：去掉顶层摘要展平与 parsed.raw_hex 等重复
+const pretty = computed(() => (message.value ? prettySlimMessage(message.value) : ""));
 </script>
 
 <template>

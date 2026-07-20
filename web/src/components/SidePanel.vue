@@ -1,6 +1,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from "vue";
 import { post } from "../api";
+import { prettySlimParsed } from "../formatJson";
 
 const props = defineProps({
   clients: { type: Array, default: () => [] },
@@ -141,7 +142,9 @@ async function doPreview() {
     return;
   }
   const r = await post("/api/build-down", { ...down });
-  preview.value = r.ok ? r.hex + "\n\n" + JSON.stringify(r.parsed, null, 2) : "错误: " + r.error;
+  preview.value = r.ok
+    ? r.hex + "\n\n" + prettySlimParsed(r.parsed)
+    : "错误: " + r.error;
 }
 
 async function doParse() {
@@ -150,7 +153,7 @@ async function doParse() {
     return;
   }
   const r = await post("/api/parse", { hex: parseHex.value });
-  parseResult.value = r.ok ? JSON.stringify(r.parsed, null, 2) : "错误: " + r.error;
+  parseResult.value = r.ok ? prettySlimParsed(r.parsed) : "错误: " + r.error;
 }
 
 async function rtuStart() {
