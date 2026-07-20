@@ -46,8 +46,11 @@ class Element:
     length: Optional[int] = None
 
     def to_dict(self) -> dict[str, Any]:
+        guide_str = (
+            f"FF{(self.guide & 0xFF):02X}" if self.guide > 0xFF else f"{self.guide:02X}"
+        )
         d: dict[str, Any] = {
-            "guide": f"{self.guide:02X}",
+            "guide": guide_str,
             "name": self.guide_name,
             "data_len": self.data_len,
             "decimals": self.decimals,

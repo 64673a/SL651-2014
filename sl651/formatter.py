@@ -44,10 +44,13 @@ def format_frame(frame: ParsedFrame, verbose: bool = True) -> str:
         lines.append("【要素】")
         for e in b.elements:
             val = e.value_text if e.value_text is not None else e.raw_hex
-            if e.value is not None:
+            if e.value is not None and e.value_text:
+                val = f"{e.value_text}  (raw={e.raw_hex})"
+            elif e.value is not None:
                 val = f"{e.value}  (raw={e.raw_hex})"
+            g = f"FF{(e.guide & 0xFF):02X}" if e.guide > 0xFF else f"{e.guide:02X}"
             lines.append(
-                f"  [{e.guide:02X}] {e.guide_name}: {val}  "
+                f"  [{g}] {e.guide_name}: {val}  "
                 f"(len={e.data_len}, dec={e.decimals})"
             )
     elif verbose and b.raw_hex and b.serial_no is None and not b.send_time:
