@@ -1,0 +1,16 @@
+.git
+.gitignore
+.DS_Store
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.idea
+.vscode
+*.log
+.env
+.venv
+venv
+data
+web/node_modules
+web/dist
+sl651/static/assets

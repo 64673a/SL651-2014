@@ -1,0 +1,24 @@
+services:
+  sl651:
+    build: .
+    image: sl651-center:latest
+    container_name: sl651-center
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+      - "${TCP_PORT:-9000}:9000"
+    environment:
+      TZ: Asia/Shanghai
+      WEB_HOST: "0.0.0.0"
+      WEB_PORT: "8080"
+      TCP_PORT: "9000"
+      AUTO_ACK: "${AUTO_ACK:-1}"
+      SL651_DB: /data/messages.db
+    volumes:
+      - sl651-data:/data
+      # 与宿主机时间对齐（只读）
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+
+volumes:
+  sl651-data:

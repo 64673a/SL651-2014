@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* 弹窗打开时避免滚动条消失导致布局偏移 */
+html {
+  scrollbar-gutter: stable;
+}
