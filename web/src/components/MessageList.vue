@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
+import { formatAnyToDisplay } from "../datetime";
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
@@ -51,7 +52,9 @@ function summary(m) {
   const b = p.body || {};
   const parts = [];
   if (m.func_name || m.func_code) parts.push(`${m.func_code || ""} ${m.func_name || ""}`.trim());
-  if (b.send_time || m.send_time) parts.push(`发报 ${b.send_time || m.send_time}`);
+  if (b.send_time || m.send_time) {
+    parts.push(`发报 ${formatAnyToDisplay(b.send_time || m.send_time)}`);
+  }
   if (b.serial_no != null || m.serial_no != null) parts.push(`流水号 ${b.serial_no ?? m.serial_no}`);
   if (b.elements?.length) {
     b.elements.slice(0, 3).forEach((e) => {
@@ -92,7 +95,7 @@ function crcOk(m) {
         <UBadge :color="dirColor(m.direction)" variant="subtle" size="sm">
           {{ (m.direction || "?").toUpperCase() }}
         </UBadge>
-        <span class="text-xs text-muted font-mono">{{ m.ts }}</span>
+        <span class="text-xs text-muted font-mono">{{ formatAnyToDisplay(m.ts) }}</span>
         <span class="text-xs text-muted font-mono">{{ m.peer }}</span>
         <span class="text-sm font-medium">{{ m.func_name || m.note || "" }}</span>
         <UBadge

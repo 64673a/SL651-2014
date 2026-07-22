@@ -8,6 +8,12 @@ from typing import Any, Optional
 from .bus import bus
 from .center import CenterHub, hub
 from .constants import FUNC_CODES
+from .down_builder import (
+    build_down_body,
+    default_down_end_flag,
+    down_meta,
+    parse_down_payload,
+)
 from .encoder import build_down_frame
 from .hexutil import bytes_to_hex, hex_to_bytes
 from .parser import parse_frame, parse_hex
@@ -153,6 +159,21 @@ def create_app(center: Optional[CenterHub] = None):
 
     # ── 下行 ──────────────────────────────────────────────
 
+    def _resolve_down(payload: dict[str, Any]) -> tuple[int, bytes, int]:
+        """解析功能码、正文、结束符。"""
+        func_code = int(str(payload.get("func_code", "37")), 16)
+        kwargs = parse_down_payload(payload)
+        body = build_down_body(func_code, **kwargs)
+        if payload.get("end_flag") not in (None, ""):
+            end_flag = int(str(payload.get("end_flag")), 16)
+        else:
+            end_flag = default_down_end_flag(func_code)
+        return func_code, body, end_flag
+
+    @app.get("/api/down-meta")
+    async def api_down_meta():
+        return {"ok": True, **down_meta()}
+
     @app.post("/api/send")
     async def api_send(payload: dict[str, Any]):
         peer = payload.get("peer")
@@ -167,16 +188,17 @@ def create_app(center: Optional[CenterHub] = None):
             elif mode == "ack":
                 rec = center.send_ack(peer, payload.get("hex", ""))
             else:
+                func_code, body, end_flag = _resolve_down(payload)
                 rec = center.send_down(
                     peer=peer,
-                    func_code=int(str(payload.get("func_code", "37")), 16),
-                    body_hex=payload.get("body_hex", ""),
+                    func_code=func_code,
+                    body_hex=bytes_to_hex(body, sep=""),
                     remote_addr=payload.get("remote_addr"),
                     center_addr=int(str(payload.get("center_addr", "1")), 16)
                     if payload.get("center_addr") is not None
                     else None,
                     password=payload.get("password"),
-                    end_flag=int(str(payload.get("end_flag", "04")), 16),
+                    end_flag=end_flag,
                     note=payload.get("note", "Web 下行调试"),
                 )
             return {"ok": True, "record": rec}
@@ -186,16 +208,24 @@ def create_app(center: Optional[CenterHub] = None):
     @app.post("/api/build-down")
     async def api_build_down(payload: dict[str, Any]):
         try:
+            func_code, body, end_flag = _resolve_down(payload)
             frame = build_down_frame(
                 remote_addr=payload.get("remote_addr", "0010100001"),
                 center_addr=int(str(payload.get("center_addr", "01")), 16),
                 password=payload.get("password", "0000"),
-                func_code=int(str(payload.get("func_code", "37")), 16),
-                body=hex_to_bytes(payload.get("body_hex", "")) if payload.get("body_hex") else b"",
-                end_flag=int(str(payload.get("end_flag", "04")), 16),
+                func_code=func_code,
+                body=body,
+                end_flag=end_flag,
             )
             parsed = parse_frame(frame).to_dict()
-            return {"ok": True, "hex": bytes_to_hex(frame, sep=""), "parsed": parsed}
+            return {
+                "ok": True,
+                "hex": bytes_to_hex(frame, sep=""),
+                "body_hex": bytes_to_hex(body, sep=""),
+                "end_flag": f"{end_flag:02X}",
+                "func_code": f"{func_code:02X}",
+                "parsed": parsed,
+            }
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 

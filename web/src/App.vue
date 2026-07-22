@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { zh_cn } from "@nuxt/ui/locale";
 import { connectWs, del, get, post } from "./api";
 import MessageList from "./components/MessageList.vue";
 import DetailDrawer from "./components/DetailDrawer.vue";
 import SidePanel from "./components/SidePanel.vue";
+import { formatAnyToDisplay } from "./datetime";
 
 const toast = useToast();
 
@@ -42,13 +44,11 @@ const autoScroll = ref(true);
 
 let unsubWs = null;
 
-/** 本地时间戳 YYYY-MM-DD HH:mm:ss.SSS（北京时间 / 浏览器本地时区） */
+/** 本地时间戳 年-月-日 YYYY-MM-DD HH:mm:ss.SSS */
 function formatLocalTs(d = new Date()) {
   const p = (n, w = 2) => String(n).padStart(w, "0");
-  return (
-    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
-    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`
-  );
+  const base = formatAnyToDisplay(d);
+  return `${base}.${p(d.getMilliseconds(), 3)}`;
 }
 
 const statsText = computed(() => {
@@ -214,7 +214,7 @@ onUnmounted(() => unsubWs?.());
 
 <template>
   <!-- scroll-body=false：弹窗不锁 body/不补 padding，避免列表横向跳动 -->
-  <UApp :scroll-body="false">
+  <UApp :locale="zh_cn" :scroll-body="false">
     <!-- 占满视口，去掉底部空白；整页不滚，左右各自滚 -->
     <div class="h-dvh flex flex-col overflow-hidden bg-default">
       <header class="shrink-0 z-20 border-b border-default bg-default">

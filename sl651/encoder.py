@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional, Sequence, Union
 
-from .constants import DOWN_DIR_ZERO_LEN, EOT, ETX, FRAME_START, STX
+from .constants import DOWN_DIR_ZERO_LEN, ESC, EOT, ETX, FRAME_START, STX
 from .crc16 import crc16_bytes
 from .hexutil import hex_to_bytes
 from .models import ParsedFrame
@@ -119,8 +119,11 @@ def build_up_frame(
     return frame + crc16_bytes(frame)
 
 
-def build_ack(frame: ParsedFrame, end_flag: int = EOT) -> bytes:
-    """确认应答（正文长度 0，功能码与上行一致）"""
+def build_ack(frame: ParsedFrame, end_flag: int = ESC) -> bytes:
+    """确认应答（正文长度 0，功能码与上行一致）。
+
+    默认结束符 ESC（保持在线），与公司 REF 确认帧样例一致；可传 EOT 要求终端退出。
+    """
     if frame.header.direction == "up":
         remote = frame.raw[3:8]
         center = frame.header.center_addr
@@ -137,7 +140,7 @@ def build_ack(frame: ParsedFrame, end_flag: int = EOT) -> bytes:
     )
 
 
-def build_ack_from_raw(raw_up: bytes, end_flag: int = EOT) -> bytes:
+def build_ack_from_raw(raw_up: bytes, end_flag: int = ESC) -> bytes:
     if len(raw_up) < 14:
         raise ValueError("上行帧过短，无法构造应答")
     return build_down_frame(

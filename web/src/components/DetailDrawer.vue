@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
+import { formatAnyToDisplay } from "../datetime";
 import HexMap from "./HexMap.vue";
 import { prettySlimMessage } from "../formatJson";
 
@@ -117,6 +118,32 @@ function fieldHex(f) {
     .join(" ");
 }
 
+/** 原始报文（连续大写 hex，便于粘贴调试） */
+const rawHex = computed(() => {
+  const h = parsed.value?.raw_hex || message.value?.raw_hex || "";
+  return String(h).replace(/\s+/g, "").toUpperCase();
+});
+
+const rawHexSpaced = computed(() =>
+  rawHex.value.replace(/(.{2})/g, "$1 ").trim()
+);
+
+const toast = useToast();
+
+async function copyRawHex() {
+  const text = rawHexSpaced.value || rawHex.value;
+  if (!text) {
+    toast.add({ title: "无原始报文", color: "warning" });
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.add({ title: "已复制原始报文", color: "success" });
+  } catch {
+    toast.add({ title: "复制失败", color: "error" });
+  }
+}
+
 // 展示用精简 JSON：去掉顶层摘要展平与 parsed.raw_hex 等重复
 const pretty = computed(() => (message.value ? prettySlimMessage(message.value) : ""));
 </script>
@@ -125,7 +152,7 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
   <UModal
     v-model:open="open"
     :title="message ? `${message.func_code || ''} ${message.func_name || '报文解析'}`.trim() : '报文解析'"
-    :description="message ? `${message.ts || ''} · ${message.peer || ''}` : ''"
+    :description="message ? `${formatAnyToDisplay(message.ts) || ''} · ${message.peer || ''}` : ''"
     :ui="{
       content: 'sm:max-w-4xl w-[min(96vw,56rem)] max-h-[90vh] flex flex-col overflow-hidden',
       body: 'flex-1 min-h-0 p-0 overflow-hidden flex flex-col',
@@ -164,8 +191,18 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
           />
 
           <div>
-            <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center justify-between gap-2 mb-2">
               <p class="text-xs font-semibold text-muted uppercase tracking-wide">原始报文</p>
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-copy"
+                :disabled="!rawHex"
+                @click="copyRawHex"
+              >
+                复制
+              </UButton>
             </div>
             <div class="rounded-lg border border-default p-3 max-h-[36vh] overflow-y-auto bg-elevated/30">
               <HexMap

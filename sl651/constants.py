@@ -78,6 +78,136 @@ BASIC_CONFIG_FUNC_CODES = {0x40, 0x41}
 RUN_PARAM_FUNC_CODES = {0x42, 0x43}
 
 # ─────────────────────────────────────────────────────────
+# 下行默认结束符（表10 + 公司 REF 样例）
+# 30–35 确认语义 → ESC；36–51 中心站查询/控制 → ENQ
+# ─────────────────────────────────────────────────────────
+DOWN_END_FLAG_BY_FUNC: dict[int, int] = {
+    **{fc: ESC for fc in range(0x30, 0x36)},
+    **{fc: ENQ for fc in range(0x36, 0x52)},
+}
+
+# 下行调试 UI schema 类型
+# simple: 仅流水号+发报时间
+# period: 38H 时段查询
+# guides: 3A/41/43 标识符列表
+# params: 40/42 标识符+数据
+# password: 49H
+# ic: 4BH
+# switches: 4C/4D
+# gate: 4E
+# water: 4F
+# init_flag: 47/48 固定标识
+DOWN_BODY_SCHEMA: dict[int, str] = {
+    0x30: "simple",
+    0x31: "simple",
+    0x32: "simple",
+    0x33: "simple",
+    0x34: "simple",
+    0x35: "simple",
+    0x36: "simple",
+    0x37: "simple",
+    0x38: "period",
+    0x39: "simple",
+    0x3A: "guides",
+    0x40: "params",
+    0x41: "guides",
+    0x42: "params",
+    0x43: "guides",
+    0x44: "simple",
+    0x45: "simple",
+    0x46: "simple",
+    0x47: "init_flag",
+    0x48: "init_flag",
+    0x49: "password",
+    0x4A: "simple",
+    0x4B: "ic",
+    0x4C: "switches",
+    0x4D: "switches",
+    0x4E: "gate",
+    0x4F: "water",
+    0x50: "simple",
+    0x51: "simple",
+}
+
+# 要素标识符默认 (data_len, decimals) → info = (data_len<<3)|decimals
+# 覆盖附录 C 常用 + 公司 REF 样例（F460/3923/2019…）
+ELEMENT_INFO_DEFAULTS: dict[int, tuple[int, int]] = {
+    0xF4: (12, 0),
+    0xF5: (24, 0),
+    0xF6: (24, 0),
+    0xF7: (24, 0),
+    0xF8: (24, 0),
+    0xF9: (24, 0),
+    0xFA: (24, 0),
+    0xFB: (24, 0),
+    0xFC: (24, 0),
+    0x04: (3, 0),  # 时间步长 N(3) → 18H
+    0x01: (4, 2),
+    0x02: (2, 1),
+    0x03: (2, 1),
+    0x06: (3, 1),
+    0x07: (3, 1),
+    0x08: (3, 0),
+    0x1A: (3, 1),
+    0x1B: (3, 1),
+    0x1C: (3, 1),
+    0x1D: (3, 1),
+    0x1E: (3, 1),
+    0x1F: (3, 1),
+    0x20: (3, 1),  # PJ → 19H
+    0x21: (3, 1),
+    0x22: (3, 1),
+    0x23: (3, 1),
+    0x24: (3, 1),
+    0x25: (3, 1),
+    0x26: (3, 1),
+    0x27: (5, 3),
+    0x38: (2, 2),  # VT → 12H
+    0x39: (4, 3),  # Z → 23H
+    0x3A: (4, 3),
+    0x3B: (4, 3),
+    0x45: (4, 0),  # 状态 4 字节 → 20H
+}
+
+# 基本配置读取 id-only 默认 info（REF 41 下行）
+BASIC_CONFIG_INFO_DEFAULTS: dict[int, int] = {
+    0x01: 0x20,  # 4 字节
+    0x02: 0x28,  # 5 字节 N(10)
+    0x03: 0x10,  # 2 字节密码
+    0x04: 0x00,
+    0x05: 0x00,
+    0x06: 0x00,
+    0x07: 0x00,
+    0x08: 0x00,
+    0x09: 0x00,
+    0x0A: 0x00,
+    0x0B: 0x00,
+    0x0C: 0x08,  # N(2) 1 字节
+    0x0D: 0x40,  # 8 字节要素位图
+    0x0E: 0x00,
+    0x0F: 0x00,
+}
+
+# 运行参数读取 id-only 默认 info（REF 43 下行：2008 2108 …）
+RUN_PARAM_INFO_DEFAULTS: dict[int, int] = {
+    0x20: 0x08,
+    0x21: 0x08,
+    0x22: 0x08,
+    0x23: 0x10,
+    0x24: 0x08,
+    0x25: 0x08,
+    0x26: 0x08,
+    0x27: 0x08,
+    0x28: 0x23,  # 水位基值等 N(7,3) 常见 4 字节 3 小数
+    0x30: 0x1B,  # 修正值等
+    0x38: 0x12,
+    0x40: 0x12,
+    0x41: 0x12,
+    0x97: 0x00,  # 初始化固态
+    0x98: 0x00,  # 恢复出厂
+}
+
+# ─────────────────────────────────────────────────────────
 # 遥测站分类码（附录A 表A.1）
 # ─────────────────────────────────────────────────────────
 STATION_TYPES = {

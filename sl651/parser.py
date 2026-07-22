@@ -445,6 +445,149 @@ def parse_elements(
     return elements
 
 
+def _switch_bits_text(status: bytes, n: int, unit: str = "路") -> str:
+    """按表71/74/77：第 i 位对应第 i+1 路，1=开 0=关。"""
+    parts: list[str] = []
+    for i in range(n):
+        bi, bit = i // 8, i % 8
+        on = 0
+        if bi < len(status):
+            on = (status[bi] >> bit) & 1
+        parts.append(f"{i + 1}号{unit}{'开' if on else '关'}")
+    return "、".join(parts) if parts else ""
+
+
+def _parse_switch_control(
+    body: bytes, pos: int, fb: FrameBody, add, unit: str = "泵"
+) -> int:
+    """4C/4D 下行/上行控制数据：后续字节数(1) + 状态字节(s)。表71/74。"""
+    if pos >= len(body):
+        return pos
+    n_follow = body[pos]
+    add("ctrl_len", "后续数据字节数", pos, pos + 1, str(n_follow), "info")
+    pos += 1
+    if n_follow <= 0 or pos >= len(body):
+        return pos
+    end = min(len(body), pos + n_follow)
+    status = body[pos:end]
+    n_bits = min(n_follow * 8, 32)
+    text = _switch_bits_text(status, n_bits, unit=unit)
+    raw = bytes_to_hex(status, sep="")
+    add("ctrl_status", f"{unit}开关状态", pos, end, text or raw, "primary")
+    fb.elements.append(
+        Element(
+            guide=0x4C if unit == "泵" else 0x4D,
+            guide_name=f"{unit}开关状态",
+            data_len=len(status),
+            decimals=0,
+            raw_hex=raw,
+            value_text=text or raw,
+            offset=pos,
+            length=len(status),
+        )
+    )
+    return end
+
+
+def _parse_gate_control(body: bytes, pos: int, fb: FrameBody, add) -> int:
+    """4E 闸门：闸门数(1) + 状态字节(ceil(n/8)) + 开度 2B BCD×n。表77。"""
+    if pos >= len(body):
+        return pos
+    n = body[pos]
+    add("gate_count", "闸门数", pos, pos + 1, str(n), "info")
+    fb.elements.append(
+        Element(
+            guide=0x4E,
+            guide_name="闸门数",
+            data_len=1,
+            decimals=0,
+            raw_hex=f"{n:02X}",
+            value=float(n),
+            value_text=str(n),
+            offset=pos,
+            length=1,
+        )
+    )
+    pos += 1
+    if n <= 0:
+        return pos
+    n_status = max(1, (n + 7) // 8)
+    if pos >= len(body):
+        return pos
+    end_st = min(len(body), pos + n_status)
+    status = body[pos:end_st]
+    text = _switch_bits_text(status, n, unit="闸门")
+    raw_st = bytes_to_hex(status, sep="")
+    add("gate_status", "闸门开关", pos, end_st, text or raw_st, "primary")
+    fb.elements.append(
+        Element(
+            guide=0x4E,
+            guide_name="闸门开关",
+            data_len=len(status),
+            decimals=0,
+            raw_hex=raw_st,
+            value_text=text or raw_st,
+            offset=pos,
+            length=len(status),
+        )
+    )
+    pos = end_st
+    for i in range(n):
+        if pos + 2 > len(body):
+            break
+        raw = body[pos : pos + 2]
+        digits = bcd_to_str(raw)
+        if "?" in digits:
+            val_text = bytes_to_hex(raw, sep="")
+            cm = None
+        else:
+            cm = int(digits)
+            val_text = f"{cm} cm"
+        add(f"gate_open_{i + 1}", f"闸门{i + 1}开度", pos, pos + 2, val_text, "success")
+        fb.elements.append(
+            Element(
+                guide=0x4E,
+                guide_name=f"闸门{i + 1}开度",
+                data_len=2,
+                decimals=0,
+                raw_hex=bytes_to_hex(raw, sep=""),
+                value=float(cm) if cm is not None else None,
+                value_text=val_text,
+                offset=pos,
+                length=2,
+            )
+        )
+        pos += 2
+    return pos
+
+
+def _parse_water_control(body: bytes, pos: int, fb: FrameBody, add) -> int:
+    """4F 水量定值：1 字节 FF=投入 / 00=退出。表80。"""
+    if pos >= len(body):
+        return pos
+    b = body[pos]
+    if b == 0xFF:
+        text = "投入 (FF)"
+    elif b == 0x00:
+        text = "退出 (00)"
+    else:
+        text = f"{b:02X}"
+    add("water_ctrl", "定值控制", pos, pos + 1, text, "primary")
+    fb.elements.append(
+        Element(
+            guide=0x4F,
+            guide_name="定值控制",
+            data_len=1,
+            decimals=0,
+            raw_hex=f"{b:02X}",
+            value_text=text,
+            offset=pos,
+            length=1,
+        )
+    )
+    return pos + 1
+
+
 def _parse_period_query_down(body: bytes, fb: FrameBody, add) -> int:
     """38H 下行：流水号+发报时间+起始时间(4)+结束时间(4)+时间步长+要素标识。"""
     pos = 8
@@ -601,6 +744,20 @@ def _parse_body(
             _append_element_spans(add, els)
         return fb, spans
 
+    # 4C/4D/4E/4F 控制命令：流水号+时间后为控制数据（非要素标识）
+    # 上行 4C/4D/4E 在站址 F1F1 之后也可能跟控制数据，此处先处理「无 F1F1 的下行」
+    if func_code in (0x4C, 0x4D, 0x4E, 0x4F) and pos < len(body):
+        if not (pos + 2 <= len(body) and body[pos] == 0xF1 and body[pos + 1] == 0xF1):
+            if func_code == 0x4C:
+                _parse_switch_control(body, pos, fb, add, unit="泵")
+            elif func_code == 0x4D:
+                _parse_switch_control(body, pos, fb, add, unit="阀门")
+            elif func_code == 0x4E:
+                _parse_gate_control(body, pos, fb, add)
+            else:
+                _parse_water_control(body, pos, fb, add)
+            return fb, spans
+
     # 站址 F1F1（可选）
     if pos + 7 <= len(body) and body[pos] == 0xF1 and body[pos + 1] == 0xF1:
         fb.remote_addr = bcd_to_str(body[pos + 2 : pos + 7])
@@ -632,6 +789,18 @@ def _parse_body(
         add("obs_guide", "观测时间标识 F0F0", pos, pos + 2, "F0 F0", "neutral")
         add("observe_time", "观测时间", pos + 2, pos + 7, fb.observe_time or "", "success")
         pos += 7
+
+    # 上行 4C/4D/4E：站址后为控制状态数据（表73/76/79）
+    if func_code in (0x4C, 0x4D, 0x4E, 0x4F) and pos < len(body):
+        if func_code == 0x4C:
+            _parse_switch_control(body, pos, fb, add, unit="泵")
+        elif func_code == 0x4D:
+            _parse_switch_control(body, pos, fb, add, unit="阀门")
+        elif func_code == 0x4E:
+            _parse_gate_control(body, pos, fb, add)
+        else:
+            _parse_water_control(body, pos, fb, add)
+        return fb, spans
 
     if pos < len(body):
         els = parse_elements(

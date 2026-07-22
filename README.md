@@ -80,7 +80,7 @@ python3 main.py rtu --host 127.0.0.1 --port 9000
 
 Web 上可：
 - 实时看上行/下行报文与解析
-- 选择已连接 RTU，构造/发送下行（查询实时数据 37、校时 4A 等）
+- 选择已连接 RTU，按功能码自动生成正文与结束符后下行（37 查实时、38 时段、3A 指定要素、4A 校时、49 改密等）
 - 启动/停止内置模拟 RTU，手动触发心跳/定时报/加报
 - 离线粘贴 hex 解析；清空报文记录
 
@@ -127,7 +127,9 @@ main.py
 
 - `GET  /api/status` — 中心站 / RTU / 客户端状态
 - `GET  /api/messages` — 历史报文
-- `POST /api/send` — 下行发送（hex / 构造帧）
+- `POST /api/send` — 下行发送（hex / 按功能码构造帧）
+- `POST /api/build-down` — 仅组帧预览（自动正文 + 默认结束符）
+- `GET  /api/down-meta` — 功能码 schema / 结束符 / 标识符列表
 - `POST /api/parse` — 离线解析
 - `POST /api/rtu/start|stop|send` — 模拟 RTU
 - `WS   /ws` — 实时推送 `message` / `clients` / `system`
