@@ -41,12 +41,6 @@ function dirColor(d) {
   return "warning";
 }
 
-function borderClass(d) {
-  if (d === "up") return "border-l-[3px] border-l-success";
-  if (d === "down") return "border-l-[3px] border-l-info";
-  return "";
-}
-
 function summary(m) {
   const p = m.parsed || {};
   const b = p.body || {};
@@ -86,8 +80,7 @@ function crcOk(m) {
       :key="m.id"
       role="button"
       tabindex="0"
-      class="block w-full shrink-0 cursor-pointer rounded-xl border border-default bg-elevated/40 p-4 border-l-[3px] transition hover:bg-elevated hover:ring-1 hover:ring-primary"
-      :class="borderClass(m.direction)"
+      class="block w-full shrink-0 cursor-pointer rounded-xl border border-default bg-elevated/40 p-4 transition hover:bg-elevated"
       @click="emit('select', m)"
       @keydown.enter="emit('select', m)"
     >

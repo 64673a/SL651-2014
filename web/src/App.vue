@@ -228,20 +228,34 @@ onUnmounted(() => unsubWs?.());
             </div>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
-            <UBadge
-              :color="status.center.running ? 'success' : 'error'"
-              variant="subtle"
-              :label="`中心站 :${status.center.port || '-'}`"
-            />
-            <UBadge :color="wsOk ? 'success' : 'error'" variant="subtle" :label="wsOk ? 'WS 已连接' : 'WS 断开'" />
-            <UBadge color="neutral" variant="subtle" :label="`RTU ${status.clients.length}`" />
-            <UBadge color="info" variant="subtle" :label="`库内 ${statsText.total}`" />
-            <UBadge
-              :color="statsText.crcFail ? 'warning' : 'neutral'"
-              variant="subtle"
-              :label="`CRC失败 ${statsText.crcFail}`"
-            />
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <!-- 连接性：中心站 + WS -->
+            <div class="flex flex-wrap items-center gap-2">
+              <UBadge
+                :color="status.center.running ? 'success' : 'error'"
+                variant="subtle"
+                :label="`中心站 :${status.center.port || '-'}`"
+              />
+              <UBadge
+                :color="wsOk ? 'success' : 'error'"
+                variant="subtle"
+                :label="wsOk ? 'WS 已连接' : 'WS 断开'"
+              />
+            </div>
+
+            <!-- 计数：RTU + 库内（紧凑文字标签，不再是 6 药丸墙） -->
+            <div class="flex items-center gap-2 text-xs text-muted">
+              <span>RTU <span class="font-medium text-highlighted">{{ status.clients.length }}</span></span>
+              <span class="text-muted">·</span>
+              <span>库内 <span class="font-medium text-highlighted">{{ statsText.total }}</span></span>
+              <!-- CRC 失败仅 >0 时显示，避免常态噪声 -->
+              <template v-if="statsText.crcFail">
+                <span class="text-muted">·</span>
+                <span class="text-warning">CRC失败 {{ statsText.crcFail }}</span>
+              </template>
+            </div>
+
+            <!-- 开关 + 主题 -->
             <div class="flex items-center gap-2 pl-1">
               <USwitch
                 :model-value="status.center.auto_ack"

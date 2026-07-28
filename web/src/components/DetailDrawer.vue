@@ -192,7 +192,7 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
 
           <div>
             <div class="flex items-center justify-between gap-2 mb-2">
-              <p class="text-xs font-semibold text-muted uppercase tracking-wide">原始报文</p>
+              <p class="text-xs font-semibold text-muted">原始报文</p>
               <UButton
                 size="xs"
                 color="neutral"
@@ -220,7 +220,7 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
 
         <div class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
           <div v-for="g in groups" :key="g.key">
-            <p class="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
+            <p class="text-xs font-semibold text-muted mb-2">
               {{ g.label }}
             </p>
             <div class="flex flex-col gap-1">
