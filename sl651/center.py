@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import socket
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -13,6 +14,9 @@ from .encoder import build_ack, build_down_frame
 from .framer import FrameSplitter
 from .hexutil import bytes_to_hex, hex_to_bytes
 from .parser import parse_frame
+
+# 无上行数据超过该秒数则踢掉（应对断电后的半开 TCP）
+_DEFAULT_IDLE_TIMEOUT = 180.0
 
 
 @dataclass
@@ -36,10 +40,12 @@ class CenterHub:
         port: int = 9000,
         auto_ack: bool = True,
         message_bus: Optional[MessageBus] = None,
+        idle_timeout: float = _DEFAULT_IDLE_TIMEOUT,
     ) -> None:
         self.host = host
         self.port = port
         self.auto_ack = auto_ack
+        self.idle_timeout = idle_timeout
         self.bus = message_bus or bus
         self._stop = threading.Event()
         self._sock: Optional[socket.socket] = None
@@ -47,6 +53,20 @@ class CenterHub:
         self._clients: dict[str, socket.socket] = {}
         self._info: dict[str, ClientInfo] = {}
         self._lock = threading.RLock()
+
+    @staticmethod
+    def _enable_tcp_keepalive(conn: socket.socket) -> None:
+        """开启 TCP keepalive，便于 OS 发现对端断电后的死连接。"""
+        conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        # Linux: TCP_KEEPIDLE；macOS: TCP_KEEPALIVE（首次探测前空闲秒数）
+        if hasattr(socket, "TCP_KEEPIDLE"):
+            conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+        elif hasattr(socket, "TCP_KEEPALIVE"):
+            conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPALIVE, 60)
+        if hasattr(socket, "TCP_KEEPINTVL"):
+            conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+        if hasattr(socket, "TCP_KEEPCNT"):
+            conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
 
     # ── 生命周期 ──────────────────────────────────────────
 
@@ -188,6 +208,7 @@ class CenterHub:
             except OSError:
                 break
             peer = f"{addr[0]}:{addr[1]}"
+            self._enable_tcp_keepalive(conn)
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with self._lock:
                 self._clients[peer] = conn
@@ -200,16 +221,23 @@ class CenterHub:
     def _handle_client(self, conn: socket.socket, peer: str) -> None:
         splitter = FrameSplitter()
         conn.settimeout(1.0)
+        last_recv = time.monotonic()
+        reason = "断开"
         try:
             while not self._stop.is_set():
                 try:
                     data = conn.recv(4096)
                 except socket.timeout:
+                    # recv 超时本身不代表断线；断电时对端可能不发 FIN，需靠空闲超时踢掉
+                    if self.idle_timeout > 0 and (time.monotonic() - last_recv) >= self.idle_timeout:
+                        reason = "空闲超时断开"
+                        break
                     continue
                 except OSError:
                     break
                 if not data:
                     break
+                last_recv = time.monotonic()
 
                 for raw in splitter.feed(data):
                     raw_hex = bytes_to_hex(raw)
@@ -272,7 +300,7 @@ class CenterHub:
             with self._lock:
                 self._clients.pop(peer, None)
                 self._info.pop(peer, None)
-            self.bus.emit("system", {"msg": f"RTU 断开 {peer}"})
+            self.bus.emit("system", {"msg": f"RTU {reason} {peer}"})
             self.bus.emit("clients", self.list_clients())
 
 
