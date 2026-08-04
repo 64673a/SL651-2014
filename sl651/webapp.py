@@ -91,6 +91,7 @@ def create_app(center: Optional[CenterHub] = None):
             "func_codes": {f"{k:02X}": v for k, v in FUNC_CODES.items()},
             "stats": stats,
             "db": str(store.db_path),
+            "retention_days": store.retention_days,
         }
 
     # ── 报文（SQLite 分页）────────────────────────────────
@@ -373,6 +374,10 @@ def run_web(
     app = create_app(hub)
     print(f"[Web] http://127.0.0.1:{port}  |  RTU TCP :{tcp_port}")
     print(f"[DB]  {store.db_path}")
+    if store.retention_days > 0:
+        print(f"[DB]  报文保留 {store.retention_days} 天（SL651_RETENTION_DAYS，0=不清理）")
+    else:
+        print("[DB]  报文自动清理已关闭（SL651_RETENTION_DAYS=0）")
     try:
         uvicorn.run(app, host=host, port=port, log_level="info")
     finally:

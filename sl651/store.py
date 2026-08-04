@@ -3,22 +3,56 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from pathlib import Path
 from typing import Any, Optional
 
+# 默认只保留最近 N 天；环境变量 SL651_RETENTION_DAYS 可覆盖，0 表示不自动清理
+DEFAULT_RETENTION_DAYS = 3
+# 后台清理周期（秒）
+_RETENTION_INTERVAL_SEC = 3600
+
+
+def default_retention_days() -> int:
+    raw = os.environ.get("SL651_RETENTION_DAYS")
+    if raw is None or raw.strip() == "":
+        return DEFAULT_RETENTION_DAYS
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return DEFAULT_RETENTION_DAYS
+
 
 class MessageStore:
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(
+        self,
+        db_path: str | Path,
+        retention_days: int | None = None,
+        auto_purge: bool = True,
+    ) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.retention_days = (
+            default_retention_days() if retention_days is None else max(0, int(retention_days))
+        )
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._init_schema()
+        self._purge_stop = threading.Event()
+        self._purge_thread: Optional[threading.Thread] = None
+        if auto_purge and self.retention_days > 0:
+            deleted = self.purge_older_than(self.retention_days)
+            if deleted:
+                print(
+                    f"[DB] 已清理 {deleted} 条超过 {self.retention_days} 天的报文"
+                    f"（保留 {self.retention_days} 天）"
+                )
+            self._start_retention_loop()
 
     def _init_schema(self) -> None:
         with self._lock:
@@ -181,7 +215,54 @@ class MessageStore:
             self._conn.commit()
             return cur.rowcount
 
+    def purge_older_than(self, days: int, *, vacuum: bool = True) -> int:
+        """删除早于保留天数的报文。days<=0 时不删除。"""
+        if days <= 0:
+            return 0
+        cutoff_mod = f"-{int(days)} days"
+        with self._lock:
+            # ts 含毫秒（YYYY-MM-DD HH:MM:SS.mmm），与 SQLite datetime 字符串比较仍正确
+            cur = self._conn.execute(
+                """
+                DELETE FROM messages
+                WHERE ts < datetime('now', 'localtime', ?)
+                   OR (ts IS NULL OR ts = '')
+                      AND created_at < datetime('now', 'localtime', ?)
+                """,
+                (cutoff_mod, cutoff_mod),
+            )
+            deleted = cur.rowcount
+            self._conn.commit()
+            if deleted > 0 and vacuum:
+                try:
+                    self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                    self._conn.execute("VACUUM")
+                except sqlite3.Error as e:
+                    print(f"[DB] VACUUM 失败（已删除 {deleted} 条）: {e}")
+        return deleted
+
+    def _start_retention_loop(self) -> None:
+        if self._purge_thread and self._purge_thread.is_alive():
+            return
+
+        def _loop() -> None:
+            while not self._purge_stop.wait(_RETENTION_INTERVAL_SEC):
+                try:
+                    n = self.purge_older_than(self.retention_days)
+                    if n:
+                        print(
+                            f"[DB] 定时清理 {n} 条超过 {self.retention_days} 天的报文"
+                        )
+                except Exception as e:
+                    print(f"[DB] 定时清理失败: {e}")
+
+        self._purge_thread = threading.Thread(
+            target=_loop, name="sl651-db-retention", daemon=True
+        )
+        self._purge_thread.start()
+
     def close(self) -> None:
+        self._purge_stop.set()
         with self._lock:
             self._conn.close()
 
@@ -216,8 +297,6 @@ class MessageStore:
 
 # 默认库路径：项目 data/messages.db（可被环境变量覆盖）
 def default_db_path() -> Path:
-    import os
-
     env = os.environ.get("SL651_DB")
     if env:
         return Path(env)

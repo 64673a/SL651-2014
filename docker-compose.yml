@@ -14,6 +14,8 @@ services:
       TCP_PORT: "9000"
       AUTO_ACK: "${AUTO_ACK:-1}"
       SL651_DB: /data/messages.db
+      # 报文保留天数，默认 3；设为 0 关闭自动清理
+      SL651_RETENTION_DAYS: "${SL651_RETENTION_DAYS:-3}"
     volumes:
       - sl651-data:/data
       # 与宿主机时间对齐（只读）

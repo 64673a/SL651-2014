@@ -28,6 +28,8 @@ cd web && npm run build
 
 数据库默认路径：`data/messages.db`，可用环境变量 `SL651_DB` 覆盖。
 
+报文默认只保留最近 **3 天**，超时自动删除并 VACUUM，避免 SQLite 无限膨胀。可用 `SL651_RETENTION_DAYS` 调整天数，设为 `0` 关闭自动清理。
+
 ## 安装
 
 ```bash
