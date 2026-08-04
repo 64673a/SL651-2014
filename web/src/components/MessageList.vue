@@ -64,6 +64,15 @@ function crcOk(m) {
   if (m.parsed?.crc_ok === true || m.parsed?.crc_ok === false) return m.parsed.crc_ok;
   return null;
 }
+
+function stationAddr(m) {
+  return (
+    m.remote_addr ||
+    m.parsed?.header?.remote_addr ||
+    m.parsed?.body?.remote_addr ||
+    ""
+  );
+}
 </script>
 
 <template>
@@ -89,7 +98,8 @@ function crcOk(m) {
           {{ (m.direction || "?").toUpperCase() }}
         </UBadge>
         <span class="text-xs text-muted font-mono">{{ formatAnyToDisplay(m.ts) }}</span>
-        <span class="text-xs text-muted font-mono">{{ m.peer }}</span>
+        <span class="text-xs font-mono text-highlighted">{{ stationAddr(m) || "—" }}</span>
+        <span v-if="m.peer" class="text-[11px] text-dimmed font-mono">{{ m.peer }}</span>
         <span class="text-sm font-medium">{{ m.func_name || m.note || "" }}</span>
         <UBadge
           v-if="crcOk(m) !== null"
