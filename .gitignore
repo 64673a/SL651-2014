@@ -14,3 +14,4 @@ web/auto-imports.d.ts
 web/components.d.ts
 web/.nuxt-ui/
 /.codegraph/
+AGENTS.md
