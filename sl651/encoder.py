@@ -22,17 +22,15 @@ def _bcd_digits(digits: str, nbytes: int) -> bytes:
 
 
 def _remote_bytes(remote: Union[str, bytes]) -> bytes:
+    """遥测站址：5 字节；字符串为 10 位 Hex（0-9A-F，可含空格）。"""
     if isinstance(remote, bytes):
         if len(remote) != 5:
             raise ValueError("遥测站地址需 5 字节")
         return remote
-    s = remote.replace(" ", "")
-    if len(s) == 10 and all(c in "0123456789ABCDEFabcdef" for c in s):
-        # 优先按 BCD 数字；若含 A-F 则按 hex
-        if all(c in "0123456789" for c in s):
-            return _bcd_digits(s, 5)
-        return hex_to_bytes(s)
-    raise ValueError(f"无效遥测站地址: {remote}")
+    s = remote.replace(" ", "").replace("\n", "").replace("\t", "")
+    if len(s) != 10 or not all(c in "0123456789ABCDEFabcdef" for c in s):
+        raise ValueError(f"无效遥测站地址: {remote}（需 10 位 Hex，0-9A-F）")
+    return hex_to_bytes(s)
 
 
 def _pwd_bytes(password: Union[str, bytes]) -> bytes:

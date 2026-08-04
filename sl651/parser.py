@@ -13,6 +13,7 @@ from .hexutil import (
     format_observe_time,
     format_send_time,
     hex_to_bytes,
+    remote_addr_to_str,
 )
 from .models import Element, FieldSpan, FrameBody, FrameHeader, ParsedFrame
 
@@ -638,7 +639,7 @@ def _parse_software_version(body: bytes, pos: int, fb: FrameBody, add) -> int:
         return pos
     # 可选 F1F1 站址
     if pos + 7 <= len(body) and body[pos] == 0xF1 and body[pos + 1] == 0xF1:
-        fb.remote_addr = bcd_to_str(body[pos + 2 : pos + 7])
+        fb.remote_addr = remote_addr_to_str(body[pos + 2 : pos + 7])
         add("addr_guide", "站址标识 F1F1", pos, pos + 2, "F1 F1", "neutral")
         add("body_remote", "遥测站址(正文)", pos + 2, pos + 7, fb.remote_addr or "", "primary")
         pos += 7
@@ -760,7 +761,7 @@ def _parse_body(
 
     # 站址 F1F1（可选）
     if pos + 7 <= len(body) and body[pos] == 0xF1 and body[pos + 1] == 0xF1:
-        fb.remote_addr = bcd_to_str(body[pos + 2 : pos + 7])
+        fb.remote_addr = remote_addr_to_str(body[pos + 2 : pos + 7])
         add("addr_guide", "站址标识 F1F1", pos, pos + 2, "F1 F1", "neutral")
         add("body_remote", "遥测站址(正文)", pos + 2, pos + 7, fb.remote_addr or "", "primary")
         pos += 7
@@ -984,9 +985,9 @@ def parse_frame(raw: bytes) -> ParsedFrame:
 
     if direction == "up":
         center = raw[2]
-        remote = bcd_to_str(raw[3:8])
+        remote = remote_addr_to_str(raw[3:8])
     else:
-        remote = bcd_to_str(raw[2:7])
+        remote = remote_addr_to_str(raw[2:7])
         center = raw[7]
 
     packet_total = packet_seq = None

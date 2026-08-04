@@ -32,6 +32,18 @@ def bcd_to_str(data: bytes) -> str:
     return "".join(out)
 
 
+def remote_addr_to_str(data: bytes) -> str:
+    """
+    5 字节遥测站地址 → 10 位大写 Hex。
+
+    SL651 6.2.3.2：水文站多为 BCD；其他站 A5–A3 为 BCD、A2–A1 为 HEX。
+    统一按原始 5 字节 Hex 展示，避免 A–F 半字节被当成非法 BCD 变成 '?'。
+    """
+    if len(data) < 5:
+        return bytes_to_hex(data, sep="")
+    return bytes_to_hex(data[:5], sep="")
+
+
 def bcd_to_int(data: bytes) -> int:
     s = bcd_to_str(data)
     if "?" in s:
