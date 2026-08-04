@@ -313,16 +313,35 @@ function applyFuncDefaults(code) {
   }
 }
 
+/** 仅随身份字段变化回填；忽略 down_count/last_seen，避免发送后盖掉手改内容 */
+let lastFilledPeerKey = "";
+
+function clientFillKey(c) {
+  if (!c) return "";
+  return [c.peer, c.remote_addr || "", c.center_addr || "", c.password || ""].join("|");
+}
+
+function fillFromClient(c) {
+  if (!c) return;
+  if (c.remote_addr) down.remote_addr = c.remote_addr;
+  if (c.center_addr) down.center_addr = c.center_addr;
+  if (c.password) down.password = c.password;
+  lastFilledPeerKey = clientFillKey(c);
+}
+
 watch(
   () => props.clients,
   (list) => {
     if (!list?.length) {
       peer.value = "";
+      lastFilledPeerKey = "";
       return;
     }
     const cur = list.find((c) => c.peer === peer.value);
     if (cur) {
-      fillFromClient(cur);
+      const key = clientFillKey(cur);
+      // 首连时常先无站址，上行后再补齐；此时 key 变化才回填
+      if (key !== lastFilledPeerKey) fillFromClient(cur);
       return;
     }
     peer.value = list[0].peer;
@@ -407,7 +426,7 @@ function validateBuildParams() {
   const remote = String(down.remote_addr || "").replace(/\s+/g, "");
   if (!remote) return "请填写遥测站址";
   if (!(remote.length === 10 && /^[0-9A-Fa-f]+$/.test(remote))) {
-    return "遥测站址无效（需 10 位数字或 Hex）";
+    return "遥测站址无效（需 10 位 Hex，0-9A-F）";
   }
 
   const center = String(down.center_addr || "").replace(/\s+/g, "");
@@ -506,13 +525,6 @@ onUnmounted(() => {
   stopLiveSendTime();
   if (hexRefreshTimer) clearTimeout(hexRefreshTimer);
 });
-
-function fillFromClient(c) {
-  if (!c) return;
-  if (c.remote_addr) down.remote_addr = c.remote_addr;
-  if (c.center_addr) down.center_addr = c.center_addr;
-  if (c.password) down.password = c.password;
-}
 
 function selectClient(c) {
   peer.value = c.peer;
@@ -904,9 +916,11 @@ async function rtuSendHex() {
         <UFormField label="目标 peer">
           <USelect
             v-model="peer"
-            :items="peerItems.length ? peerItems : [{ label: '无可用连接', value: '' }]"
+            :items="peerItems"
+            :placeholder="peerItems.length ? '选择 RTU' : '无可用连接'"
             value-key="value"
             class="w-full"
+            :disabled="!peerItems.length"
           />
         </UFormField>
         <UFormField label="模式">
