@@ -25,13 +25,19 @@ const filtered = computed(() => {
   return [...list].sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
 });
 
+function scrollToTop() {
+  if (listEl.value) listEl.value.scrollTop = 0;
+}
+
+defineExpose({ scrollToTop });
+
 /** 监听条目数变化：autoScroll 时滚回顶部看最新 */
 watch(
   () => filtered.value.length,
   async () => {
     if (!props.autoScroll) return;
     await nextTick();
-    if (listEl.value) listEl.value.scrollTop = 0;
+    scrollToTop();
   }
 );
 
@@ -51,7 +57,7 @@ function summary(m) {
   }
   if (b.serial_no != null || m.serial_no != null) parts.push(`流水号 ${b.serial_no ?? m.serial_no}`);
   if (b.elements?.length) {
-    b.elements.slice(0, 3).forEach((e) => {
+    b.elements.forEach((e) => {
       const v = e.value != null ? e.value : e.value_text || e.raw;
       parts.push(`${e.name}: ${v}`);
     });
@@ -115,7 +121,7 @@ function stationAddr(m) {
       </p>
       <p v-else class="text-xs text-muted">{{ m.note || "—" }}</p>
 
-      <div v-if="summary(m).length" class="mt-2 flex flex-wrap gap-1.5">
+      <div v-if="summary(m).length" class="mt-2 flex max-w-[70%] flex-wrap gap-1.5">
         <UBadge v-for="(s, i) in summary(m)" :key="i" color="neutral" variant="soft" size="sm">
           {{ s }}
         </UBadge>

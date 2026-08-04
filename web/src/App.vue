@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { zh_cn } from "@nuxt/ui/locale";
 import { connectWs, del, get, post } from "./api";
 import MessageList from "./components/MessageList.vue";
@@ -20,6 +20,7 @@ const status = reactive({
 
 const wsOk = ref(false);
 const liveMessages = ref([]);
+const historyList = ref(null);
 const history = reactive({
   items: [],
   total: 0,
@@ -145,6 +146,8 @@ async function loadHistory(reset = false) {
     const data = await get(`/api/messages?${q}`);
     history.items = data.items || [];
     history.total = data.total || 0;
+    await nextTick();
+    historyList.value?.scrollToTop?.();
   } catch (e) {
     console.warn(e);
   } finally {
@@ -319,9 +322,10 @@ onUnmounted(() => unsubWs?.());
                     class="w-56"
                     size="sm"
                     :ui="{
-                      content: 'min-w-[var(--reka-select-trigger-width)] max-w-[min(90vw,24rem)]',
-                      itemLabel: 'whitespace-normal break-all',
-                      value: 'truncate',
+                      content: 'min-w-[max(var(--reka-select-trigger-width),20rem)] w-max max-w-[min(90vw,36rem)]',
+                      item: 'pe-8',
+                      itemLabel: 'whitespace-nowrap font-mono text-xs',
+                      value: 'truncate font-mono text-xs',
                     }"
                   />
                   <USelect
@@ -388,6 +392,7 @@ onUnmounted(() => unsubWs?.());
             />
             <template v-else>
               <MessageList
+                ref="historyList"
                 :messages="history.items"
                 direction="all"
                 :auto-scroll="false"
