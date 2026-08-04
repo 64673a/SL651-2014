@@ -36,7 +36,7 @@ const filters = reactive({
 });
 const liveFilters = reactive({
   direction: "all",
-  peer: "",
+  peer: "all",
 });
 const selected = ref(null);
 const tab = ref("live");
@@ -81,6 +81,30 @@ const funcItems = computed(() => [
     value: code,
   })),
 ]);
+
+/** 实时流：按已连接 RTU 快速筛选（value 禁止空串） */
+const livePeerItems = computed(() => [
+  { label: "全部 RTU", value: "all" },
+  ...(status.clients || []).map((c) => ({
+    label: c.remote_addr ? `${c.peer} · ${c.remote_addr}` : c.peer,
+    value: c.peer,
+  })),
+]);
+
+const livePeerFilter = computed(() =>
+  liveFilters.peer && liveFilters.peer !== "all" ? liveFilters.peer : ""
+);
+
+watch(
+  () => status.clients,
+  (list) => {
+    if (liveFilters.peer === "all") return;
+    if (!(list || []).some((c) => c.peer === liveFilters.peer)) {
+      liveFilters.peer = "all";
+    }
+  },
+  { deep: true }
+);
 
 const tabItems = [
   { label: "实时流", value: "live", icon: "i-lucide-radio" },
@@ -288,12 +312,17 @@ onUnmounted(() => unsubWs?.());
               <UTabs v-model="tab" :items="tabItems" :content="false" size="sm" class="w-auto" />
               <div class="flex flex-wrap items-center gap-2">
                 <template v-if="tab === 'live'">
-                  <UInput
+                  <USelect
                     v-model="liveFilters.peer"
-                    icon="i-lucide-network"
-                    placeholder="按 IP / peer 筛选"
-                    class="w-40"
+                    :items="livePeerItems"
+                    value-key="value"
+                    class="w-56"
                     size="sm"
+                    :ui="{
+                      content: 'min-w-[var(--reka-select-trigger-width)] max-w-[min(90vw,24rem)]',
+                      itemLabel: 'whitespace-normal break-all',
+                      value: 'truncate',
+                    }"
                   />
                   <USelect
                     v-model="liveFilters.direction"
@@ -353,7 +382,7 @@ onUnmounted(() => unsubWs?.());
               v-if="tab === 'live'"
               :messages="liveMessages"
               :direction="liveFilters.direction"
-              :peer="liveFilters.peer"
+              :peer="livePeerFilter"
               :auto-scroll="autoScroll && !selected"
               @select="selected = $event"
             />
