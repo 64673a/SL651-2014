@@ -31,8 +31,8 @@ const filters = reactive({
   direction: "all",
   keyword: "",
   peer: "",
-  func_code: "",
-  crc_ok: "",
+  func_code: "all",
+  crc_ok: "all",
 });
 const liveFilters = reactive({
   direction: "all",
@@ -69,13 +69,13 @@ const directionItems = [
 ];
 
 const crcItems = [
-  { label: "CRC 全部", value: "" },
+  { label: "CRC 全部", value: "all" },
   { label: "CRC 通过", value: "1" },
   { label: "CRC 失败", value: "0" },
 ];
 
 const funcItems = computed(() => [
-  { label: "全部功能码", value: "" },
+  { label: "全部功能码", value: "all" },
   ...Object.entries(status.func_codes || {}).map(([code, name]) => ({
     label: `${code} ${name}`,
     value: code,
@@ -115,7 +115,7 @@ async function loadHistory(reset = false) {
     if (filters.direction && filters.direction !== "all") q.set("direction", filters.direction);
     if (filters.keyword) q.set("keyword", filters.keyword);
     if (filters.peer) q.set("peer", filters.peer);
-    if (filters.func_code) q.set("func_code", filters.func_code);
+    if (filters.func_code && filters.func_code !== "all") q.set("func_code", filters.func_code);
     if (filters.crc_ok === "1") q.set("crc_ok", "true");
     if (filters.crc_ok === "0") q.set("crc_ok", "false");
     const data = await get(`/api/messages?${q}`);
