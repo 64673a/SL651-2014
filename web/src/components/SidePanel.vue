@@ -23,6 +23,7 @@ import {
 } from "../downSchemas";
 import { prettySlimParsed } from "../formatJson";
 import { patchFrameSendTime, spaceHex as spaceHexFrame } from "../sl651Frame";
+import { writeClipboard } from "../clipboard";
 
 const props = defineProps({
   clients: { type: Array, default: () => [] },
@@ -141,7 +142,7 @@ function patchPreviewSendTime(dt) {
 
 async function copyText(text, title = "已复制") {
   try {
-    await navigator.clipboard.writeText(text || "");
+    await writeClipboard(text || "");
     toast.add({ title, color: "success" });
   } catch {
     toast.add({ title: "复制失败", color: "error" });

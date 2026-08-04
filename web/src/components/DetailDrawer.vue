@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { formatAnyToDisplay } from "../datetime";
 import HexMap from "./HexMap.vue";
 import { prettySlimMessage } from "../formatJson";
+import { writeClipboard } from "../clipboard";
 
 const props = defineProps({ message: Object });
 const emit = defineEmits(["close"]);
@@ -137,7 +138,7 @@ async function copyRawHex() {
     return;
   }
   try {
-    await navigator.clipboard.writeText(text);
+    await writeClipboard(text);
     toast.add({ title: "已复制原始报文", color: "success" });
   } catch {
     toast.add({ title: "复制失败", color: "error" });
