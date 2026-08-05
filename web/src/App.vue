@@ -10,7 +10,7 @@ import { formatAnyToDisplay } from "./datetime";
 const toast = useToast();
 
 const status = reactive({
-  center: { running: false, port: 9000, auto_ack: true },
+  center: { running: false, port: 9000, auto_ack: true, encoding: "hex_bcd" },
   clients: [],
   rtu: null,
   func_codes: {},
@@ -262,6 +262,11 @@ onUnmounted(() => unsubWs?.());
                 :color="status.center.running ? 'success' : 'error'"
                 variant="subtle"
                 :label="`中心站 :${status.center.port || '-'}`"
+              />
+              <UBadge
+                color="neutral"
+                variant="outline"
+                :label="status.center.encoding === 'ascii' ? 'ASCII' : 'HEX/BCD'"
               />
               <UBadge
                 :color="wsOk ? 'success' : 'error'"

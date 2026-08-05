@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 from typing import Callable, Optional
 
+from . import constants as C
 from .encoder import build_ack
 from .formatter import format_frame
 from .framer import FrameSplitter
@@ -31,11 +32,13 @@ class CenterStationServer:
         host: str = "0.0.0.0",
         port: int = 9000,
         auto_ack: bool = True,
+        encoding: str = C.WIRE_AUTO,
         on_frame: Optional[OnFrame] = None,
     ) -> None:
         self.host = host
         self.port = port
         self.auto_ack = auto_ack
+        self.encoding = C.normalize_wire_encoding(encoding, default=C.WIRE_AUTO)
         self.on_frame = on_frame or self._default_on_frame
         self._stop = threading.Event()
         self._sock: Optional[socket.socket] = None
@@ -82,7 +85,7 @@ class CenterStationServer:
             self._sock = None
 
     def _handle_client(self, conn: socket.socket, peer: str) -> None:
-        splitter = FrameSplitter()
+        splitter = FrameSplitter(encoding=self.encoding)
         conn.settimeout(1.0)
         try:
             while not self._stop.is_set():
@@ -97,7 +100,7 @@ class CenterStationServer:
                 print(f"[中心站] {peer} 收到 {len(data)} 字节: {bytes_to_hex(data)}")
                 for raw in splitter.feed(data):
                     try:
-                        frame = parse_frame(raw)
+                        frame = parse_frame(raw, encoding=self.encoding)
                     except Exception as e:
                         print(f"[中心站] {peer} 解析失败: {e}")
                         print(f"  raw: {bytes_to_hex(raw)}")
@@ -123,6 +126,7 @@ def run_serial(
     port: str,
     baudrate: int = 9600,
     auto_ack: bool = True,
+    encoding: str = C.WIRE_AUTO,
     on_frame: Optional[OnFrame] = None,
 ) -> None:
     """串口模式（需 pyserial）"""
@@ -134,7 +138,8 @@ def run_serial(
     on_frame = on_frame or (
         lambda f, p: print(f"\n[{datetime.now():%Y-%m-%d %H:%M:%S}] 来自 {p}\n{format_frame(f)}")
     )
-    splitter = FrameSplitter()
+    wire = C.normalize_wire_encoding(encoding, default=C.WIRE_AUTO)
+    splitter = FrameSplitter(encoding=wire)
     ser = serial.Serial(port, baudrate=baudrate, timeout=0.5)
     print(f"[中心站] 串口 {port} @ {baudrate}  auto_ack={auto_ack}")
     print("[中心站] 等待数据... (Ctrl+C 退出)")
@@ -147,7 +152,7 @@ def run_serial(
             print(f"[中心站] {peer} 收到 {len(data)} 字节: {bytes_to_hex(data)}")
             for raw in splitter.feed(data):
                 try:
-                    frame = parse_frame(raw)
+                    frame = parse_frame(raw, encoding=wire)
                 except Exception as e:
                     print(f"[中心站] 解析失败: {e}")
                     continue

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
+from . import constants as C
 from .bus import MessageBus, bus
 from .encoder import build_ack, build_down_frame
 from .framer import FrameSplitter
@@ -25,6 +26,7 @@ class ClientInfo:
     remote_addr: str = ""
     center_addr: int = 0
     password: str = ""
+    encoding: str = ""
     connected_at: str = ""
     last_seen: str = ""
     up_count: int = 0
@@ -39,12 +41,14 @@ class CenterHub:
         host: str = "0.0.0.0",
         port: int = 9000,
         auto_ack: bool = True,
+        encoding: str = C.WIRE_HEX_BCD,
         message_bus: Optional[MessageBus] = None,
         idle_timeout: float = _DEFAULT_IDLE_TIMEOUT,
     ) -> None:
         self.host = host
         self.port = port
         self.auto_ack = auto_ack
+        self.encoding = C.normalize_wire_encoding(encoding)
         self.idle_timeout = idle_timeout
         self.bus = message_bus or bus
         self._stop = threading.Event()
@@ -119,6 +123,7 @@ class CenterHub:
                     "remote_addr": c.remote_addr,
                     "center_addr": f"{c.center_addr:02X}",
                     "password": c.password,
+                    "encoding": c.encoding,
                     "connected_at": c.connected_at,
                     "last_seen": c.last_seen,
                     "up_count": c.up_count,
@@ -163,6 +168,7 @@ class CenterHub:
         center_addr: int | None = None,
         password: str | None = None,
         end_flag: int = 0x04,
+        encoding: str | None = None,
         note: str = "下行调试",
     ) -> dict:
         with self._lock:
@@ -173,7 +179,10 @@ class CenterHub:
         remote = remote_addr or info.remote_addr or "0000000000"
         center = center_addr if center_addr is not None else (info.center_addr or 1)
         pwd = password or info.password or "0000"
-        body = hex_to_bytes(body_hex) if body_hex.strip() else b""
+        body = hex_to_bytes(body_hex) if str(body_hex or "").strip() else b""
+        wire = C.normalize_wire_encoding(encoding, default=self.encoding)
+        if wire == C.WIRE_AUTO:
+            raise ValueError("下行组帧不能使用 auto，请明确选择 hex_bcd 或 ascii")
 
         # 若 remote 仍为空，尝试从 peer 无法推断时用 0
         if not remote or remote == "0000000000":
@@ -187,6 +196,7 @@ class CenterHub:
             func_code=func_code,
             body=body,
             end_flag=end_flag,
+            encoding=wire,
         )
         return self.send_raw(peer, frame, note=note)
 
@@ -259,6 +269,7 @@ class CenterHub:
                                 info.remote_addr = frame.header.remote_addr
                                 info.center_addr = frame.header.center_addr
                                 info.password = frame.header.password
+                                info.encoding = frame.header.encoding
 
                     self.bus.publish(
                         "up",

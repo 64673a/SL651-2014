@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 import { formatAnyToDisplay } from "../datetime";
+import { wireEncodingColor, wireEncodingLabel } from "../wireEncoding";
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
@@ -79,6 +80,11 @@ function stationAddr(m) {
     ""
   );
 }
+
+function rawSource(m) {
+  return m.raw_hex || m.parsed?.raw_hex || "";
+}
+
 </script>
 
 <template>
@@ -103,6 +109,14 @@ function stationAddr(m) {
         <UBadge :color="dirColor(m.direction)" variant="subtle" size="sm">
           {{ (m.direction || "?").toUpperCase() }}
         </UBadge>
+        <UBadge
+          v-if="rawSource(m) || m.parsed"
+          :color="wireEncodingColor(m)"
+          variant="outline"
+          size="sm"
+        >
+          {{ wireEncodingLabel(m) }}
+        </UBadge>
         <span class="text-xs text-muted font-mono">{{ formatAnyToDisplay(m.ts) }}</span>
         <span class="text-xs font-mono text-highlighted">{{ stationAddr(m) || "—" }}</span>
         <span v-if="m.peer" class="text-[11px] text-dimmed font-mono">{{ m.peer }}</span>
@@ -116,13 +130,25 @@ function stationAddr(m) {
         />
       </div>
 
-      <p v-if="m.raw_hex" class="font-mono text-xs text-toned break-all leading-relaxed">
-        {{ m.raw_hex }}
+      <p
+        v-if="rawSource(m)"
+        class="w-[90%] max-w-[90%] whitespace-pre-wrap break-all font-mono text-xs text-toned leading-relaxed"
+        :title="rawSource(m)"
+      >
+        {{ rawSource(m) }}
       </p>
       <p v-else class="text-xs text-muted">{{ m.note || "—" }}</p>
 
       <div v-if="summary(m).length" class="mt-2 flex max-w-[70%] flex-wrap gap-1.5">
-        <UBadge v-for="(s, i) in summary(m)" :key="i" color="neutral" variant="soft" size="sm">
+        <UBadge
+          v-for="(s, i) in summary(m)"
+          :key="i"
+          color="neutral"
+          variant="soft"
+          size="sm"
+          class="max-w-full whitespace-normal break-words text-left"
+          :title="s"
+        >
           {{ s }}
         </UBadge>
       </div>

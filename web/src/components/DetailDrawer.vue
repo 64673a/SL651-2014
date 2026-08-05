@@ -4,6 +4,7 @@ import { formatAnyToDisplay } from "../datetime";
 import HexMap from "./HexMap.vue";
 import { prettySlimMessage } from "../formatJson";
 import { writeClipboard } from "../clipboard";
+import { wireEncoding, wireEncodingColor, wireEncodingLabel } from "../wireEncoding";
 
 const props = defineProps({ message: Object });
 const emit = defineEmits(["close"]);
@@ -62,6 +63,9 @@ const bytes = computed(() => {
 });
 
 const fields = computed(() => parsed.value?.fields || []);
+const encoding = computed(() => (message.value ? wireEncoding(message.value) : ""));
+const encodingLabel = computed(() => (message.value ? wireEncodingLabel(message.value) : "未知"));
+const encodingColor = computed(() => (message.value ? wireEncodingColor(message.value) : "warning"));
 
 const groups = computed(() => {
   const order = ["header", "body", "trailer"];
@@ -180,6 +184,7 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
               站址 {{ message.remote_addr }}
             </UBadge>
             <UBadge color="neutral" variant="outline">{{ message.direction }}</UBadge>
+            <UBadge :color="encodingColor" variant="outline">{{ encodingLabel }}</UBadge>
             <UBadge color="neutral" variant="outline">{{ bytes.length }} 字节</UBadge>
           </div>
 
@@ -209,6 +214,7 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
               <HexMap
                 :bytes="bytes"
                 :fields="fields"
+                :show-ascii="encoding === 'ascii'"
                 :highlight-id="highlightId"
                 :hover-offset="hoverOffset"
                 @hover-byte="onHoverByte"

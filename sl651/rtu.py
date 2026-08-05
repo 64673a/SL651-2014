@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
+from . import constants as C
 from .encoder import (
     build_heartbeat_body,
     build_report_body,
@@ -31,6 +32,7 @@ class SimulatedRtu:
         heartbeat_interval: float = 60.0,
         report_interval: float = 300.0,
         auto_report: bool = True,
+        encoding: str = C.WIRE_HEX_BCD,
         water_level: float = 12.34,
         rain: float = 1.5,
         voltage: float = 12.6,
@@ -44,6 +46,9 @@ class SimulatedRtu:
         self.heartbeat_interval = heartbeat_interval
         self.report_interval = report_interval
         self.auto_report = auto_report
+        self.encoding = C.normalize_wire_encoding(encoding)
+        if self.encoding == C.WIRE_AUTO:
+            raise ValueError("模拟 RTU 必须明确选择 hex_bcd 或 ascii，不能使用 auto")
         self.water_level = water_level
         self.rain = rain
         self.voltage = voltage
@@ -83,9 +88,14 @@ class SimulatedRtu:
 
     def send_heartbeat(self) -> bytes:
         sn = self._next_sn()
-        body = build_heartbeat_body(sn)
+        body = build_heartbeat_body(sn, encoding=self.encoding)
         frame = build_up_frame(
-            self.center_addr, self.remote_addr, self.password, 0x2F, body
+            self.center_addr,
+            self.remote_addr,
+            self.password,
+            0x2F,
+            body,
+            encoding=self.encoding,
         )
         self.send_frame(frame, f"2F 链路维持 sn={sn}")
         return frame
@@ -103,9 +113,15 @@ class SimulatedRtu:
             self.remote_addr,
             station_type=self.station_type,
             elements=elements,
+            encoding=self.encoding,
         )
         frame = build_up_frame(
-            self.center_addr, self.remote_addr, self.password, func_code, body
+            self.center_addr,
+            self.remote_addr,
+            self.password,
+            func_code,
+            body,
+            encoding=self.encoding,
         )
         name = {0x32: "定时报", 0x33: "加报", 0x34: "小时报"}.get(func_code, f"{func_code:02X}")
         self.send_frame(frame, f"{func_code:02X} {name} sn={sn}")
@@ -122,7 +138,7 @@ class SimulatedRtu:
 
     def _recv_loop(self) -> None:
         assert self._sock is not None
-        splitter = FrameSplitter()
+        splitter = FrameSplitter(encoding=self.encoding)
         while not self._stop.is_set():
             try:
                 data = self._sock.recv(4096)
@@ -136,7 +152,7 @@ class SimulatedRtu:
                 break
             for raw in splitter.feed(data):
                 try:
-                    frame = parse_frame(raw)
+                    frame = parse_frame(raw, encoding=self.encoding)
                     h = frame.header
                     print(
                         f"[RTU] 收到下行 {h.func_code:02X}({h.func_name}) "
@@ -213,6 +229,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--station-type", type=lambda x: int(x, 0), default=0x48)
     p.add_argument("--heartbeat", type=float, default=30.0, help="心跳间隔秒，0=关闭")
     p.add_argument("--report", type=float, default=60.0, help="定时报间隔秒，0=关闭")
+    p.add_argument(
+        "--encoding",
+        choices=[C.WIRE_HEX_BCD, C.WIRE_ASCII],
+        default=C.WIRE_HEX_BCD,
+        help="线路编码；模拟 RTU 发送时不能使用 auto",
+    )
     p.add_argument("--water", type=float, default=12.34)
     p.add_argument("--rain", type=float, default=1.5)
     p.add_argument("--voltage", type=float, default=12.6)
@@ -228,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         station_type=args.station_type,
         heartbeat_interval=args.heartbeat,
         report_interval=args.report,
+        encoding=args.encoding,
         water_level=args.water,
         rain=args.rain,
         voltage=args.voltage,

@@ -44,9 +44,10 @@ class Element:
     value_text: Optional[str] = None
     offset: Optional[int] = None  # 相对正文起点
     length: Optional[int] = None
+    guide_code: Optional[str] = None  # ASCII 编码下的原始标识符
 
     def to_dict(self) -> dict[str, Any]:
-        guide_str = (
+        guide_str = self.guide_code or (
             f"FF{(self.guide & 0xFF):02X}" if self.guide > 0xFF else f"{self.guide:02X}"
         )
         d: dict[str, Any] = {
@@ -61,6 +62,8 @@ class Element:
         if self.offset is not None:
             d["offset"] = self.offset
             d["length"] = self.length
+        if self.guide_code:
+            d["guide_code"] = self.guide_code
         return d
 
 
@@ -77,6 +80,7 @@ class FrameHeader:
     stx: int
     packet_total: Optional[int] = None
     packet_seq: Optional[int] = None
+    encoding: str = "hex_bcd"
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -88,6 +92,7 @@ class FrameHeader:
             "body_len": self.body_len,
             "direction": self.direction,
             "m3": self.m3,
+            "encoding": self.encoding,
         }
         if self.m3:
             d["packet_total"] = self.packet_total
@@ -105,6 +110,7 @@ class FrameBody:
     observe_time: Optional[str] = None
     elements: list[Element] = field(default_factory=list)
     raw_hex: str = ""
+    raw_text: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -116,6 +122,7 @@ class FrameBody:
             "observe_time": self.observe_time,
             "elements": [e.to_dict() for e in self.elements],
             "raw_hex": self.raw_hex,
+            "raw_text": self.raw_text,
         }
 
 
@@ -132,10 +139,12 @@ class ParsedFrame:
     errors: list[str] = field(default_factory=list)
     fields: list[FieldSpan] = field(default_factory=list)
     body_offset: int = 14
+    raw_text: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "raw_hex": self.raw_hex,
+            "raw_text": self.raw_text,
             "header": self.header.to_dict(),
             "body": self.body.to_dict(),
             "end_flag": f"{self.end_flag:02X}",

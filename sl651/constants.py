@@ -30,8 +30,36 @@ ESC = 0x1B          # 传输结束，终端保持在线
 UP_END_FLAGS = {ETX, ETB}
 DOWN_END_FLAGS = {ENQ, ACK, EOT, ESC, NAK}
 
-MAX_FRAME_LEN = 4095
+# 4095 is the protocol body-length limit.  The wire frame also contains
+# headers, terminator, and CRC, so the splitter needs a larger upper bound.
+MAX_BODY_LEN = 4095
+MAX_FRAME_LEN = 8192
 MIN_FRAME_LEN = 17  # 7E7E + 最小头 + STX + ETX + CRC
+
+# 线路编码。"hex_bcd" is the existing 7E7E binary frame format.
+WIRE_HEX_BCD = "hex_bcd"
+WIRE_ASCII = "ascii"
+WIRE_AUTO = "auto"
+
+
+def normalize_wire_encoding(value: str | None, default: str = WIRE_HEX_BCD) -> str:
+    """Normalize public/API aliases for the SL651 wire encoding."""
+    if value is None or not str(value).strip():
+        return default
+    raw = str(value).strip().lower().replace("-", "_")
+    aliases = {
+        "hex": WIRE_HEX_BCD,
+        "bcd": WIRE_HEX_BCD,
+        "hex_bcd": WIRE_HEX_BCD,
+        "hex/bcd": WIRE_HEX_BCD,
+        "binary": WIRE_HEX_BCD,
+        "ascii": WIRE_ASCII,
+        "text": WIRE_ASCII,
+        "auto": WIRE_AUTO,
+    }
+    if raw not in aliases:
+        raise ValueError(f"不支持的线路编码: {value}（可选 hex_bcd/ascii/auto）")
+    return aliases[raw]
 
 # 下行：方向位 D15=1
 DOWN_DIR_ZERO_LEN = 0x8000

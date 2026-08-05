@@ -45,6 +45,7 @@ class MessageRecord:
             h = self.parsed.get("header") or {}
             b = self.parsed.get("body") or {}
             d["crc_ok"] = self.parsed.get("crc_ok")
+            d["encoding"] = h.get("encoding")
             d["func_code"] = h.get("func_code")
             d["func_name"] = h.get("func_name")
             d["remote_addr"] = h.get("remote_addr") or b.get("remote_addr")

@@ -67,6 +67,7 @@ class MessageStore:
                     note        TEXT NOT NULL DEFAULT '',
                     error       TEXT,
                     crc_ok      INTEGER,
+                    encoding    TEXT,
                     func_code   TEXT,
                     func_name   TEXT,
                     remote_addr TEXT,
@@ -102,9 +103,9 @@ class MessageStore:
                 """
                 INSERT OR REPLACE INTO messages (
                     id, ts, direction, peer, raw_hex, note, error,
-                    crc_ok, func_code, func_name, remote_addr, center_addr,
+                    crc_ok, encoding, func_code, func_name, remote_addr, center_addr,
                     serial_no, send_time, parsed_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     rec["id"],
@@ -115,6 +116,7 @@ class MessageStore:
                     rec.get("note") or "",
                     rec.get("error"),
                     crc_val,
+                    header.get("encoding"),
                     header.get("func_code"),
                     header.get("func_name"),
                     header.get("remote_addr") or body.get("remote_addr"),
@@ -285,6 +287,7 @@ class MessageStore:
             "note": d["note"],
             "error": d["error"],
             "crc_ok": True if crc == 1 else False if crc == 0 else None,
+            "encoding": d.get("encoding"),
             "func_code": d.get("func_code"),
             "func_name": d.get("func_name"),
             "remote_addr": d.get("remote_addr"),

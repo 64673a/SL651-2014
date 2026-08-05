@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from . import constants as C
+from .ascii_codec import parse_ascii_frame
 from .crc16 import crc16_bytes, verify
 from .hexutil import (
     bcd_to_str,
@@ -942,7 +943,7 @@ def _build_layout(
             if idx is not None:
                 start = prev = idx
 
-    add("end", "结束符", n - 3, n - 2, f"{end_flag:02X} ({end_name})", "trailer", "warning")
+    add("end", "结束符", n - 3, n - 2, f"{end_flag:02X} ({end_name})", "trailer", "neutral")
     add(
         "crc",
         "CRC16",
@@ -955,8 +956,12 @@ def _build_layout(
     return fields
 
 
-def parse_frame(raw: bytes) -> ParsedFrame:
-    """解析完整一帧（含 7E7E ... CRC）"""
+def parse_frame(raw: bytes, encoding: str = C.WIRE_AUTO) -> ParsedFrame:
+    """解析完整一帧；默认按 SOH/7E7E 自动识别线路编码。"""
+    wire = C.normalize_wire_encoding(encoding, default=C.WIRE_AUTO)
+    if wire == C.WIRE_ASCII or (wire == C.WIRE_AUTO and raw[:1] == bytes([C.SOH])):
+        return parse_ascii_frame(raw)
+
     errors: list[str] = []
     raw_hex = bytes_to_hex(raw)
 
@@ -1053,5 +1058,5 @@ def parse_frame(raw: bytes) -> ParsedFrame:
     )
 
 
-def parse_hex(hex_str: str) -> ParsedFrame:
-    return parse_frame(hex_to_bytes(hex_str))
+def parse_hex(hex_str: str, encoding: str = C.WIRE_AUTO) -> ParsedFrame:
+    return parse_frame(hex_to_bytes(hex_str), encoding=encoding)

@@ -1,4 +1,4 @@
-/** 前端展示用：去掉与顶层/UI 重复的字段，输出更干净的 JSON */
+/** 前端展示用：保留协议摘要，避免把布局和重复原文塞进 JSON。 */
 
 function omitNulls(obj) {
   if (obj == null || typeof obj !== "object" || Array.isArray(obj)) return obj;
@@ -12,39 +12,60 @@ function omitNulls(obj) {
 }
 
 /**
- * 精简 ParsedFrame.to_dict：去掉与外层 raw_hex 重复项，body 去空，fields 保留（布局用）。
+ * 精简 ParsedFrame.to_dict：布局字段由界面单独展示，不放入 JSON 摘要。
  */
 export function slimParsed(parsed) {
   if (!parsed || typeof parsed !== "object") return parsed;
+  const header = parsed.header
+    ? omitNulls({
+        center_addr: parsed.header.center_addr,
+        remote_addr: parsed.header.remote_addr,
+        password: parsed.header.password,
+        func_code: parsed.header.func_code,
+        func_name: parsed.header.func_name,
+        body_len: parsed.header.body_len,
+        direction: parsed.header.direction,
+        encoding: parsed.header.encoding,
+        m3: parsed.header.m3,
+        packet_total: parsed.header.packet_total,
+        packet_seq: parsed.header.packet_seq,
+      })
+    : undefined;
+
   const body = parsed.body
     ? omitNulls({
         serial_no: parsed.body.serial_no,
         send_time: parsed.body.send_time,
-        remote_addr: parsed.body.remote_addr,
+        remote_addr:
+          parsed.body.remote_addr && parsed.body.remote_addr !== parsed.header?.remote_addr
+            ? parsed.body.remote_addr
+            : undefined,
         station_type: parsed.body.station_type,
         station_type_name: parsed.body.station_type_name,
         observe_time: parsed.body.observe_time,
-        elements: parsed.body.elements,
+        text: parsed.body.raw_text,
+        elements: parsed.body.elements?.map((element) =>
+          omitNulls({
+            guide: element.guide_code || element.guide,
+            name: element.name,
+            value: element.value != null ? element.value : element.value_text,
+            raw: element.raw,
+          })
+        ),
       })
     : undefined;
 
   return omitNulls({
-    header: parsed.header,
+    header,
     body,
-    end_flag: parsed.end_flag,
-    end_flag_name: parsed.end_flag_name,
-    crc: parsed.crc,
-    crc_ok: parsed.crc_ok,
+    end: omitNulls({ flag: parsed.end_flag, name: parsed.end_flag_name }),
+    crc: omitNulls({ value: parsed.crc, ok: parsed.crc_ok }),
     errors: parsed.errors?.length ? parsed.errors : undefined,
-    fields: parsed.fields?.length ? parsed.fields : undefined,
-    body_offset: parsed.body_offset,
-    frame_len: parsed.frame_len,
   });
 }
 
 /**
- * 消息记录展示：只保留元数据 + raw_hex + 精简 parsed，
- * 去掉 bus 展平的 crc_ok/func_code 等顶层摘要（已在 parsed.header/body 中）。
+ * 消息记录展示：只保留元数据 + raw_hex + 精简 parsed。
  */
 export function slimMessage(msg) {
   if (!msg || typeof msg !== "object") return msg;

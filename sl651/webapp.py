@@ -5,6 +5,7 @@ import threading
 from pathlib import Path
 from typing import Any, Optional
 
+from . import constants as C
 from .bus import bus
 from .center import CenterHub, hub
 from .constants import FUNC_CODES
@@ -74,6 +75,7 @@ def create_app(center: Optional[CenterHub] = None):
                     "water_level": _rtu.water_level,
                     "rain": _rtu.rain,
                     "voltage": _rtu.voltage,
+                    "encoding": _rtu.encoding,
                 }
         try:
             stats = store.stats()
@@ -85,6 +87,7 @@ def create_app(center: Optional[CenterHub] = None):
                 "host": center.host,
                 "port": center.port,
                 "auto_ack": center.auto_ack,
+                "encoding": center.encoding,
             },
             "clients": center.list_clients(),
             "rtu": rtu_info,
@@ -153,23 +156,27 @@ def create_app(center: Optional[CenterHub] = None):
     async def api_parse(payload: dict[str, Any]):
         hex_str = payload.get("hex", "")
         try:
-            frame = parse_hex(hex_str)
+            frame = parse_hex(hex_str, encoding=payload.get("encoding", C.WIRE_AUTO))
             return {"ok": True, "parsed": frame.to_dict()}
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
     # ── 下行 ──────────────────────────────────────────────
 
-    def _resolve_down(payload: dict[str, Any]) -> tuple[int, bytes, int]:
+    def _resolve_down(payload: dict[str, Any]) -> tuple[int, bytes, int, str]:
         """解析功能码、正文、结束符。"""
         func_code = int(str(payload.get("func_code", "37")), 16)
         kwargs = parse_down_payload(payload)
+        wire = C.normalize_wire_encoding(payload.get("encoding"), default=center.encoding)
+        if wire == C.WIRE_AUTO:
+            raise ValueError("下行组帧不能使用 auto，请明确选择 hex_bcd 或 ascii")
+        kwargs["encoding"] = wire
         body = build_down_body(func_code, **kwargs)
         if payload.get("end_flag") not in (None, ""):
             end_flag = int(str(payload.get("end_flag")), 16)
         else:
             end_flag = default_down_end_flag(func_code)
-        return func_code, body, end_flag
+        return func_code, body, end_flag, wire
 
     @app.get("/api/down-meta")
     async def api_down_meta():
@@ -189,7 +196,7 @@ def create_app(center: Optional[CenterHub] = None):
             elif mode == "ack":
                 rec = center.send_ack(peer, payload.get("hex", ""))
             else:
-                func_code, body, end_flag = _resolve_down(payload)
+                func_code, body, end_flag, wire = _resolve_down(payload)
                 rec = center.send_down(
                     peer=peer,
                     func_code=func_code,
@@ -200,6 +207,7 @@ def create_app(center: Optional[CenterHub] = None):
                     else None,
                     password=payload.get("password"),
                     end_flag=end_flag,
+                    encoding=wire,
                     note=payload.get("note", "Web 下行调试"),
                 )
             return {"ok": True, "record": rec}
@@ -209,7 +217,7 @@ def create_app(center: Optional[CenterHub] = None):
     @app.post("/api/build-down")
     async def api_build_down(payload: dict[str, Any]):
         try:
-            func_code, body, end_flag = _resolve_down(payload)
+            func_code, body, end_flag, wire = _resolve_down(payload)
             frame = build_down_frame(
                 remote_addr=payload.get("remote_addr", "0010100001"),
                 center_addr=int(str(payload.get("center_addr", "01")), 16),
@@ -217,14 +225,17 @@ def create_app(center: Optional[CenterHub] = None):
                 func_code=func_code,
                 body=body,
                 end_flag=end_flag,
+                encoding=wire,
             )
-            parsed = parse_frame(frame).to_dict()
+            parsed = parse_frame(frame, encoding=wire).to_dict()
             return {
                 "ok": True,
                 "hex": bytes_to_hex(frame, sep=""),
                 "body_hex": bytes_to_hex(body, sep=""),
+                "body_text": body.decode("ascii", errors="replace") if wire == C.WIRE_ASCII else "",
                 "end_flag": f"{end_flag:02X}",
                 "func_code": f"{func_code:02X}",
+                "encoding": wire,
                 "parsed": parsed,
             }
         except Exception as e:
@@ -232,10 +243,21 @@ def create_app(center: Optional[CenterHub] = None):
 
     @app.post("/api/center/config")
     async def center_config(payload: dict[str, Any]):
+        wire = None
+        if "encoding" in payload:
+            wire = C.normalize_wire_encoding(payload.get("encoding"))
+            if wire == C.WIRE_AUTO:
+                return JSONResponse(
+                    {"ok": False, "error": "中心站默认下行编码不能使用 auto"},
+                    status_code=400,
+                )
         if "auto_ack" in payload:
             center.auto_ack = bool(payload["auto_ack"])
             bus.emit("system", {"msg": f"自动应答 = {center.auto_ack}"})
-        return {"ok": True, "auto_ack": center.auto_ack}
+        if wire is not None:
+            center.encoding = wire
+            bus.emit("system", {"msg": f"默认下行编码 = {wire}"})
+        return {"ok": True, "auto_ack": center.auto_ack, "encoding": center.encoding}
 
     # ── 模拟 RTU ──────────────────────────────────────────
 
@@ -243,6 +265,12 @@ def create_app(center: Optional[CenterHub] = None):
     async def rtu_start(payload: dict[str, Any] | None = None):
         global _rtu, _rtu_thread
         payload = payload or {}
+        wire = C.normalize_wire_encoding(payload.get("encoding"), default=center.encoding)
+        if wire == C.WIRE_AUTO:
+            return JSONResponse(
+                {"ok": False, "error": "模拟 RTU 必须明确选择 hex_bcd 或 ascii"},
+                status_code=400,
+            )
         with _rtu_lock:
             if _rtu_thread and _rtu_thread.is_alive():
                 return {"ok": False, "error": "模拟 RTU 已在运行"}
@@ -257,6 +285,7 @@ def create_app(center: Optional[CenterHub] = None):
                 water_level=float(payload.get("water", 12.34)),
                 rain=float(payload.get("rain", 1.5)),
                 voltage=float(payload.get("voltage", 12.6)),
+                encoding=wire,
             )
             _rtu_thread = threading.Thread(target=_rtu.run, daemon=True)
             _rtu_thread.start()
@@ -328,6 +357,7 @@ def create_app(center: Optional[CenterHub] = None):
                             "running": center.running,
                             "port": center.port,
                             "auto_ack": center.auto_ack,
+                            "encoding": center.encoding,
                         },
                         "stats": store.stats(),
                     },
@@ -363,12 +393,14 @@ def run_web(
     port: int = 8080,
     tcp_port: int = 9000,
     auto_ack: bool = True,
+    encoding: str = C.WIRE_HEX_BCD,
 ) -> None:
     import uvicorn
 
     hub.host = "0.0.0.0"
     hub.port = tcp_port
     hub.auto_ack = auto_ack
+    hub.encoding = C.normalize_wire_encoding(encoding)
     hub.start(blocking=False)
 
     app = create_app(hub)

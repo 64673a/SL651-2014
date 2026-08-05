@@ -7,16 +7,17 @@ import json
 import sys
 
 from . import __version__
+from . import constants as C
 from .formatter import format_frame
 from .framer import FrameSplitter
 from .hexutil import hex_to_bytes
 from .parser import parse_frame
 
 
-def _extract_frames(data: bytes) -> list[bytes]:
-    splitter = FrameSplitter()
+def _extract_frames(data: bytes, encoding: str = C.WIRE_AUTO) -> list[bytes]:
+    splitter = FrameSplitter(encoding=encoding)
     frames = splitter.feed(data)
-    if not frames and data[:2] == b"\x7e\x7e":
+    if not frames and (data[:2] == b"\x7e\x7e" or data[:1] == bytes([C.SOH])):
         frames = [data]
     return frames
 
@@ -36,15 +37,15 @@ def cmd_parse(args: argparse.Namespace) -> int:
         print(f"hex 格式错误: {e}", file=sys.stderr)
         return 2
 
-    frames = _extract_frames(data)
+    frames = _extract_frames(data, args.encoding)
     if not frames:
-        print("未找到有效帧（需以 7E7E 开头）", file=sys.stderr)
+        print("未找到有效帧（需以 7E7E 或 SOH(01H) 开头）", file=sys.stderr)
         return 1
 
     ok = 0
     for i, raw in enumerate(frames):
         try:
-            frame = parse_frame(raw)
+            frame = parse_frame(raw, encoding=args.encoding)
         except Exception as e:
             print(f"帧 {i + 1} 解析失败: {e}", file=sys.stderr)
             continue
@@ -62,12 +63,18 @@ def cmd_listen(args: argparse.Namespace) -> int:
     from .server import CenterStationServer, run_serial
 
     if args.serial:
-        run_serial(args.serial, baudrate=args.baud, auto_ack=not args.no_ack)
+        run_serial(
+            args.serial,
+            baudrate=args.baud,
+            auto_ack=not args.no_ack,
+            encoding=args.encoding,
+        )
     else:
         CenterStationServer(
             host=args.host,
             port=args.port,
             auto_ack=not args.no_ack,
+            encoding=args.encoding,
         ).start()
     return 0
 
@@ -80,6 +87,7 @@ def cmd_web(args: argparse.Namespace) -> int:
         port=args.port,
         tcp_port=args.tcp_port,
         auto_ack=not args.no_ack,
+        encoding=args.encoding,
     )
     return 0
 
@@ -98,6 +106,8 @@ def cmd_rtu(args: argparse.Namespace) -> int:
         args.remote,
         "--password",
         args.password,
+        "--encoding",
+        args.encoding,
         "--heartbeat",
         str(args.heartbeat),
         "--report",
@@ -126,6 +136,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--hex", "-x", help="十六进制字符串（可含空格）")
     sp.add_argument("--file", "-f", help="从文件读取 hex")
     sp.add_argument("--json", action="store_true", help="以 JSON 输出")
+    sp.add_argument(
+        "--encoding",
+        choices=[C.WIRE_AUTO, C.WIRE_HEX_BCD, C.WIRE_ASCII],
+        default=C.WIRE_AUTO,
+    )
     sp.set_defaults(func=cmd_parse)
 
     sl = sub.add_parser("listen", help="启动中心站监听（TCP 或串口，无 Web）")
@@ -134,6 +149,11 @@ def build_parser() -> argparse.ArgumentParser:
     sl.add_argument("--serial", "-s", help="串口设备")
     sl.add_argument("--baud", type=int, default=9600)
     sl.add_argument("--no-ack", action="store_true")
+    sl.add_argument(
+        "--encoding",
+        choices=[C.WIRE_AUTO, C.WIRE_HEX_BCD, C.WIRE_ASCII],
+        default=C.WIRE_AUTO,
+    )
     sl.set_defaults(func=cmd_listen)
 
     sw = sub.add_parser("web", help="启动 Web 调试控制台（含中心站 TCP）")
@@ -141,6 +161,11 @@ def build_parser() -> argparse.ArgumentParser:
     sw.add_argument("--port", "-p", type=int, default=8080, help="Web 端口")
     sw.add_argument("--tcp-port", type=int, default=9000, help="RTU TCP 端口")
     sw.add_argument("--no-ack", action="store_true", help="关闭自动应答")
+    sw.add_argument(
+        "--encoding",
+        choices=[C.WIRE_AUTO, C.WIRE_HEX_BCD, C.WIRE_ASCII],
+        default=C.WIRE_HEX_BCD,
+    )
     sw.set_defaults(func=cmd_web)
 
     sr = sub.add_parser("rtu", help="启动模拟 RTU")
@@ -151,6 +176,11 @@ def build_parser() -> argparse.ArgumentParser:
     sr.add_argument("--password", default="A000")
     sr.add_argument("--heartbeat", type=float, default=30.0)
     sr.add_argument("--report", type=float, default=60.0)
+    sr.add_argument(
+        "--encoding",
+        choices=[C.WIRE_HEX_BCD, C.WIRE_ASCII, C.WIRE_AUTO],
+        default=C.WIRE_HEX_BCD,
+    )
     sr.add_argument("--water", type=float, default=12.34)
     sr.add_argument("--rain", type=float, default=1.5)
     sr.add_argument("--voltage", type=float, default=12.6)

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Optional, Sequence, Union
 
 from . import constants as C
+from .ascii_codec import build_ascii_down_body
 from .encoder import _bcd_digits, _now_bcd6
 from .hexutil import hex_to_bytes
 
@@ -134,6 +135,8 @@ def build_down_body(
     serial_no: int = 0,
     send_time: Optional[Union[datetime, str]] = None,
     body_hex: Optional[str] = None,
+    body_text: Optional[str] = None,
+    encoding: str = C.WIRE_HEX_BCD,
     # 38H
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
@@ -158,6 +161,31 @@ def build_down_body(
     water_control: Optional[str] = None,
 ) -> bytes:
     """按功能码构造下行正文。body_hex 非空时直接使用。"""
+    wire = C.normalize_wire_encoding(encoding)
+    if wire == C.WIRE_AUTO:
+        raise ValueError("组帧不能使用 auto，请明确选择 hex_bcd 或 ascii")
+    if wire == C.WIRE_ASCII:
+        return build_ascii_down_body(
+            func_code,
+            serial_no=serial_no,
+            send_time=send_time,
+            body_hex=body_hex,
+            body_text=body_text,
+            start_time=start_time,
+            end_time=end_time,
+            step_unit=step_unit,
+            step_value=step_value,
+            guides=guides,
+            params=params,
+            old_password=old_password,
+            new_password=new_password,
+            ic_enable=ic_enable,
+            switch_bits=switch_bits,
+            gate_count=gate_count,
+            gate_bits=gate_bits,
+            gate_openings_cm=gate_openings_cm,
+            water_control=water_control,
+        )
     if body_hex is not None and str(body_hex).strip():
         return hex_to_bytes(str(body_hex))
 
@@ -282,12 +310,13 @@ def build_down_command(
     func_code: int,
     *,
     end_flag: Optional[int] = None,
+    encoding: str = C.WIRE_HEX_BCD,
     **body_kwargs: Any,
 ) -> tuple[bytes, bytes, int]:
     """组完整下行帧。返回 (frame, body, end_flag)。"""
     from .encoder import build_down_frame
 
-    body = build_down_body(func_code, **body_kwargs)
+    body = build_down_body(func_code, encoding=encoding, **body_kwargs)
     ef = end_flag if end_flag is not None else default_down_end_flag(func_code)
     frame = build_down_frame(
         remote_addr=remote_addr,
@@ -296,6 +325,7 @@ def build_down_command(
         func_code=func_code,
         body=body,
         end_flag=ef,
+        encoding=encoding,
     )
     return frame, body, ef
 
@@ -367,6 +397,10 @@ def parse_down_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     if payload.get("body_hex"):
         kwargs["body_hex"] = payload["body_hex"]
+    if payload.get("body_text") is not None:
+        kwargs["body_text"] = payload["body_text"]
+    if payload.get("encoding") is not None:
+        kwargs["encoding"] = C.normalize_wire_encoding(payload.get("encoding"))
 
     sn = payload.get("serial_no", 0)
     try:

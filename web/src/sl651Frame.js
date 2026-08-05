@@ -71,6 +71,23 @@ export function patchFrameSendTime(frameHex, dt) {
   try {
     const raw = hexToBytes(frameHex);
     if (raw.length < SEND_TIME_ABS_OFFSET + SEND_TIME_LEN + 1 + 2) return null;
+    if (raw[0] === 0x01) {
+      if (raw.length < 24 + 16 + 1 + 4) return null;
+      const stx = raw[23];
+      const bodyStart = stx === 0x16 ? 30 : 24;
+      const text = bcd6TextFromDateTime(dt);
+      if (!text || bodyStart + 16 > raw.length) return null;
+      for (let i = 0; i < text.length; i++) raw[bodyStart + 4 + i] = text.charCodeAt(i);
+      const crc = bytesToHex(crc16Bytes(raw.subarray(0, raw.length - 4)));
+      if (crc.length !== 4) return null;
+      for (let i = 0; i < 4; i++) raw[raw.length - 4 + i] = crc.charCodeAt(i);
+      const hex = bytesToHex(raw);
+      return {
+        hex,
+        spaced: spaceHex(hex),
+        body_hex: bytesToHex(raw.subarray(bodyStart, raw.length - 5)),
+      };
+    }
     if (raw[0] !== 0x7e || raw[1] !== 0x7e) return null;
     const t = bcd6FromDateTime(dt);
     if (!t) return null;
@@ -92,4 +109,10 @@ export function patchFrameSendTime(frameHex, dt) {
   } catch {
     return null;
   }
+}
+
+function bcd6TextFromDateTime(dt) {
+  if (!dt) return null;
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(Number(dt.year) % 100)}${p(dt.month)}${p(dt.day)}${p(dt.hour ?? 0)}${p(dt.minute ?? 0)}${p(dt.second ?? 0)}`;
 }

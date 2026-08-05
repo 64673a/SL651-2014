@@ -6,7 +6,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 协议解析 | 帧头 / 正文 / 要素 / CRC16，支持 2F/32/33/34 等 |
+| 协议解析 | 帧头 / 正文 / 要素 / CRC16，支持 HEX/BCD 与 ASCII 字符编码 |
 | 中心站 TCP | 粘包切分、多 RTU 会话、自动确认 |
 | 模拟 RTU | 心跳、定时报、加报，可调水位/雨量/电压 |
 | Web 控制台 | Vue3 实时报文、历史分页查询、下行调试 |
@@ -29,6 +29,8 @@ cd web && npm run build
 数据库默认路径：`data/messages.db`，可用环境变量 `SL651_DB` 覆盖。
 
 报文默认只保留最近 **3 天**，超时自动删除并 VACUUM，避免 SQLite 无限膨胀。可用 `SL651_RETENTION_DAYS` 调整天数，设为 `0` 关闭自动清理。
+
+本版本数据库 schema 包含线路编码字段；升级时不做旧表迁移，旧库可直接删除后由程序重新创建。
 
 ## 安装
 
@@ -86,6 +88,8 @@ Web 上可：
 - 启动/停止内置模拟 RTU，手动触发心跳/定时报/加报
 - 离线粘贴 hex 解析；清空报文记录
 
+ASCII 字符编码与 HEX/BCD 编码共用同一套中心站、模拟 RTU 和 Web 调试流程。ASCII 帧以 `SOH (01H)` 开始，CLI 解析默认自动识别；下行组帧和模拟 RTU 需要明确选择编码，不能使用 `auto`。
+
 ## 命令一览
 
 ```bash
@@ -95,6 +99,10 @@ python3 main.py web -p 8080 --tcp-port 9000
 # 仅 TCP 中心站（无 Web）
 python3 main.py listen -p 9000
 
+# ASCII 字符编码中心站 / 模拟 RTU
+python3 main.py listen -p 9000 --encoding ascii
+python3 main.py rtu --host 127.0.0.1 --port 9000 --encoding ascii
+
 # 模拟 RTU
 python3 main.py rtu --host 127.0.0.1 --port 9000
 python3 main.py rtu --once report   # 只发一帧定时报
@@ -102,6 +110,8 @@ python3 main.py rtu --once report   # 只发一帧定时报
 # 离线解析
 python3 main.py parse -f samples/regular_report.hex
 python3 main.py parse -x "7E7E..." --json
+# ASCII 帧同样使用 hex 字符串输入；--encoding auto 为默认值
+python3 main.py parse -x "01..." --encoding ascii --json
 ```
 
 ## 端口

@@ -43,6 +43,7 @@ const down = reactive({
   remote_addr: "",
   center_addr: "01",
   password: "A000",
+  encoding: "hex_bcd",
   serial_no: 0,
   body_hex: "",
   // 38
@@ -157,6 +158,7 @@ const rtuForm = reactive({
   water: 12.34,
   rain: 1.5,
   voltage: 12.6,
+  encoding: "hex_bcd",
 });
 const rtuHex = ref("");
 const rtuSending = ref(false);
@@ -165,6 +167,11 @@ const rtuMsg = ref("未启动");
 const modeItems = [
   { label: "构造下行帧", value: "down" },
   { label: "原始 Hex", value: "hex" },
+];
+
+const encodingItems = [
+  { label: "HEX/BCD（二进制）", value: "hex_bcd" },
+  { label: "ASCII 字符编码", value: "ascii" },
 ];
 
 /** 结束符下拉：短标签，避免侧栏半宽时截断 */
@@ -394,6 +401,7 @@ function structureKey() {
     remote: down.remote_addr,
     center: down.center_addr,
     pwd: down.password,
+    encoding: down.encoding,
     sn: down.serial_no,
     body: showAdvanced.value ? down.body_hex : "",
     adv: showAdvanced.value,
@@ -461,6 +469,7 @@ watch(
     down.remote_addr,
     down.center_addr,
     down.password,
+    down.encoding,
     down.serial_no,
     down.body_hex,
     showAdvanced.value,
@@ -594,6 +603,7 @@ function buildPayload() {
     remote_addr: down.remote_addr,
     center_addr: down.center_addr,
     password: down.password,
+    encoding: down.encoding,
     serial_no: Number(down.serial_no) || 0,
   };
   // 自动：组帧瞬间 now()；手动：选择器（不回写 sendTimeDt，避免触发循环刷新）
@@ -832,6 +842,7 @@ async function rtuStart() {
   const r = await post("/api/rtu/start", {
     ...rtuForm,
     port: Number(props.centerPort) || 9000,
+    encoding: rtuForm.encoding,
   });
   rtuMsg.value = r.ok ? "启动中..." : "失败: " + r.error;
   toast.add({
@@ -929,6 +940,9 @@ async function rtuSendHex() {
         </UFormField>
 
         <template v-if="mode === 'down'">
+          <UFormField label="线路编码">
+            <USelect v-model="down.encoding" :items="encodingItems" value-key="value" class="w-full" />
+          </UFormField>
           <UFormField label="功能码">
             <USelect
               v-model="down.func_code"
@@ -1317,6 +1331,9 @@ async function rtuSendHex() {
           <UFormField label="雨量"><UInput v-model.number="rtuForm.rain" type="number" step="0.1" /></UFormField>
           <UFormField label="电压"><UInput v-model.number="rtuForm.voltage" type="number" step="0.01" /></UFormField>
         </div>
+        <UFormField label="线路编码">
+          <USelect v-model="rtuForm.encoding" :items="encodingItems" value-key="value" class="w-full" />
+        </UFormField>
         <div class="flex flex-wrap gap-2">
           <UButton color="primary" icon="i-lucide-play" @click="rtuStart">启动</UButton>
           <UButton color="neutral" variant="soft" icon="i-lucide-square" @click="rtuStop">停止</UButton>

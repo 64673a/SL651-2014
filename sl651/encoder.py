@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional, Sequence, Union
 
-from .constants import DOWN_DIR_ZERO_LEN, ESC, EOT, ETX, FRAME_START, STX
+from . import constants as C
+from .constants import DOWN_DIR_ZERO_LEN, ESC, EOT, ETX, FRAME_START, STX, SYN
 from .crc16 import crc16_bytes
 from .hexutil import hex_to_bytes
 from .models import ParsedFrame
@@ -58,16 +59,47 @@ def build_down_frame(
     func_code: int,
     body: bytes = b"",
     end_flag: int = EOT,
+    encoding: str = C.WIRE_HEX_BCD,
+    packet_total: Optional[int] = None,
+    packet_seq: Optional[int] = None,
 ) -> bytes:
     """
     构造下行帧：
     7E7E | 遥测站(5) | 中心站(1) | 密码(2) | 功能码(1) | 长度(2, D15=1) | STX | 正文 | 结束符 | CRC
     """
+    wire = C.normalize_wire_encoding(encoding)
+    if wire == C.WIRE_ASCII:
+        from .ascii_codec import build_ascii_down_frame
+
+        return build_ascii_down_frame(
+            remote_addr=remote_addr,
+            center_addr=center_addr,
+            password=password,
+            func_code=func_code,
+            body=body,
+            end_flag=end_flag,
+            packet_total=packet_total,
+            packet_seq=packet_seq,
+        )
+    if wire == C.WIRE_AUTO:
+        raise ValueError("组帧不能使用 auto，请明确选择 hex_bcd 或 ascii")
+
     remote = _remote_bytes(remote_addr)
     center = bytes([center_addr & 0xFF])
     pwd = _pwd_bytes(password)
     func = bytes([func_code & 0xFF])
-    body_len = len(body)
+    packet = b""
+    stx = STX
+    if packet_total is not None or packet_seq is not None:
+        if packet_total is None or packet_seq is None:
+            raise ValueError("M3 帧必须同时提供 packet_total 和 packet_seq")
+        if not (0 <= packet_total <= 0xFFF and 0 <= packet_seq <= 0xFFF):
+            raise ValueError("M3 包总数/序号范围为 0~FFF")
+        stx = SYN
+        packet_value = ((packet_total & 0xFFF) << 12) | (packet_seq & 0xFFF)
+        packet = packet_value.to_bytes(3, "big")
+    wire_body = packet + body
+    body_len = len(wire_body)
     len_field = DOWN_DIR_ZERO_LEN | (body_len & 0x0FFF)
     len_bytes = bytes([(len_field >> 8) & 0xFF, len_field & 0xFF])
     frame = (
@@ -77,8 +109,8 @@ def build_down_frame(
         + pwd
         + func
         + len_bytes
-        + bytes([STX])
-        + body
+        + bytes([stx])
+        + wire_body
         + bytes([end_flag])
     )
     return frame + crc16_bytes(frame)
@@ -91,16 +123,47 @@ def build_up_frame(
     func_code: int,
     body: bytes = b"",
     end_flag: int = ETX,
+    encoding: str = C.WIRE_HEX_BCD,
+    packet_total: Optional[int] = None,
+    packet_seq: Optional[int] = None,
 ) -> bytes:
     """
     构造上行帧：
     7E7E | 中心站(1) | 遥测站(5) | 密码(2) | 功能码(1) | 长度(2, D15=0) | STX | 正文 | 结束符 | CRC
     """
+    wire = C.normalize_wire_encoding(encoding)
+    if wire == C.WIRE_ASCII:
+        from .ascii_codec import build_ascii_up_frame
+
+        return build_ascii_up_frame(
+            center_addr=center_addr,
+            remote_addr=remote_addr,
+            password=password,
+            func_code=func_code,
+            body=body,
+            end_flag=end_flag,
+            packet_total=packet_total,
+            packet_seq=packet_seq,
+        )
+    if wire == C.WIRE_AUTO:
+        raise ValueError("组帧不能使用 auto，请明确选择 hex_bcd 或 ascii")
+
     remote = _remote_bytes(remote_addr)
     center = bytes([center_addr & 0xFF])
     pwd = _pwd_bytes(password)
     func = bytes([func_code & 0xFF])
-    body_len = len(body)
+    packet = b""
+    stx = STX
+    if packet_total is not None or packet_seq is not None:
+        if packet_total is None or packet_seq is None:
+            raise ValueError("M3 帧必须同时提供 packet_total 和 packet_seq")
+        if not (0 <= packet_total <= 0xFFF and 0 <= packet_seq <= 0xFFF):
+            raise ValueError("M3 包总数/序号范围为 0~FFF")
+        stx = SYN
+        packet_value = ((packet_total & 0xFFF) << 12) | (packet_seq & 0xFFF)
+        packet = packet_value.to_bytes(3, "big")
+    wire_body = packet + body
+    body_len = len(wire_body)
     len_field = body_len & 0x0FFF
     len_bytes = bytes([(len_field >> 8) & 0xFF, len_field & 0xFF])
     frame = (
@@ -110,8 +173,8 @@ def build_up_frame(
         + pwd
         + func
         + len_bytes
-        + bytes([STX])
-        + body
+        + bytes([stx])
+        + wire_body
         + bytes([end_flag])
     )
     return frame + crc16_bytes(frame)
@@ -122,33 +185,42 @@ def build_ack(frame: ParsedFrame, end_flag: int = ESC) -> bytes:
 
     默认结束符 ESC（保持在线），与公司 REF 确认帧样例一致；可传 EOT 要求终端退出。
     """
-    if frame.header.direction == "up":
-        remote = frame.raw[3:8]
-        center = frame.header.center_addr
-    else:
-        remote = frame.raw[2:7]
-        center = frame.header.center_addr
+    remote = frame.header.remote_addr
+    center = frame.header.center_addr
+    encoding = C.normalize_wire_encoding(frame.header.encoding)
+    body = b""
+    if encoding == C.WIRE_ASCII and frame.body.serial_no is not None:
+        from .ascii_codec import build_ascii_heartbeat_body
+
+        body = build_ascii_heartbeat_body(frame.body.serial_no, frame.body.send_time)
+    packet_total = packet_seq = None
+    if frame.header.m3:
+        packet_total = frame.header.packet_total
+        if packet_total is not None:
+            packet_seq = (
+                packet_total
+                if end_flag in (EOT, ESC)
+                else frame.header.packet_seq
+            )
     return build_down_frame(
         remote_addr=remote,
         center_addr=center,
         password=frame.header.password,
         func_code=frame.header.func_code,
-        body=b"",
+        body=body,
         end_flag=end_flag,
+        encoding=encoding,
+        packet_total=packet_total,
+        packet_seq=packet_seq,
     )
 
 
 def build_ack_from_raw(raw_up: bytes, end_flag: int = ESC) -> bytes:
     if len(raw_up) < 14:
         raise ValueError("上行帧过短，无法构造应答")
-    return build_down_frame(
-        remote_addr=raw_up[3:8],
-        center_addr=raw_up[2],
-        password=raw_up[8:10],
-        func_code=raw_up[10],
-        body=b"",
-        end_flag=end_flag,
-    )
+    from .parser import parse_frame
+
+    return build_ack(parse_frame(raw_up), end_flag=end_flag)
 
 
 def encode_element(guide: int, value: float | int | str, data_len: int, decimals: int) -> bytes:
@@ -167,7 +239,16 @@ def encode_element(guide: int, value: float | int | str, data_len: int, decimals
     return bytes([guide & 0xFF, info]) + _bcd_digits(digits, data_len)
 
 
-def build_heartbeat_body(serial_no: int, send_time: Optional[datetime] = None) -> bytes:
+def build_heartbeat_body(
+    serial_no: int,
+    send_time: Optional[datetime] = None,
+    *,
+    encoding: str = C.WIRE_HEX_BCD,
+) -> bytes:
+    if C.normalize_wire_encoding(encoding) == C.WIRE_ASCII:
+        from .ascii_codec import build_ascii_heartbeat_body
+
+        return build_ascii_heartbeat_body(serial_no, send_time)
     sn = bytes([(serial_no >> 8) & 0xFF, serial_no & 0xFF])
     return sn + _now_bcd6(send_time)
 
@@ -179,12 +260,26 @@ def build_report_body(
     elements: Optional[Sequence[tuple[int, float | int | str, int, int]]] = None,
     send_time: Optional[datetime] = None,
     observe_time: Optional[datetime] = None,
+    *,
+    encoding: str = C.WIRE_HEX_BCD,
 ) -> bytes:
     """
     定时报/加报正文：
     流水号(2) + 发报时间(6) + F1F1 + 站址(5) + 分类码(1) + F0F0 + 观测时间(5) + 要素...
     elements: [(guide, value, data_len, decimals), ...]
     """
+    if C.normalize_wire_encoding(encoding) == C.WIRE_ASCII:
+        from .ascii_codec import build_ascii_report_body
+
+        return build_ascii_report_body(
+            serial_no,
+            remote_addr,
+            station_type=station_type,
+            elements=elements,
+            send_time=send_time,
+            observe_time=observe_time,
+        )
+
     sn = bytes([(serial_no >> 8) & 0xFF, serial_no & 0xFF])
     body = bytearray()
     body += sn
