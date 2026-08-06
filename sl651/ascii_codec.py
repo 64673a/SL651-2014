@@ -228,8 +228,11 @@ def build_ascii_down_body(
         return prefix.encode("ascii")
 
     if fc == 0x38:
-        unit = (step_unit or "N").upper()[0]
-        step = f"DR{unit}{max(0, int(step_value)) % 100:02d}"
+        from .down_builder import normalize_period_step
+
+        su, sv = normalize_period_step(guides, step_unit, step_value)
+        unit = (su or "N").upper()[0]
+        step = f"DR{unit}{max(0, int(sv)) % 100:02d}"
         groups = [_digits(start_time, 8, now=False), _digits(end_time, 8, now=False), step]
         groups.extend(_guide_code(g, fc) for g in (guides or [0xF4]))
         return _join_body(prefix, groups)

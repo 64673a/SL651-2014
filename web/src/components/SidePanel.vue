@@ -21,6 +21,9 @@ import {
   FUNC_DOWN_META,
   getFuncMeta,
   guideOptionsFor,
+  isHourComboGuide,
+  matchedStepForGuide,
+  validatePeriodStep,
 } from "../downSchemas";
 import { prettySlimParsed } from "../formatJson";
 import { patchFrameSendTime, spaceHex as spaceHexFrame } from "../sl651Frame";
@@ -48,8 +51,9 @@ const down = reactive({
   serial_no: 0,
   body_hex: "",
   // 38
-  step_unit: "N",
-  step_value: 5,
+  // F4 默认：表 C.1 特定搭配 000000（DRH00）
+  step_unit: "H",
+  step_value: 0,
   // guides（多选 value 列表，如 ["F4","39"]）
   selectedGuides: ["F4"],
   // params 40/42
@@ -293,9 +297,26 @@ const periodGuide = computed({
     return (down.selectedGuides && down.selectedGuides[0]) || "F4";
   },
   set(v) {
-    down.selectedGuides = v ? [String(v).toUpperCase()] : [];
+    const g = v ? String(v).toUpperCase() : "F4";
+    down.selectedGuides = v ? [g] : ["F4"];
+    applyStepForGuide(g);
   },
 });
+
+/** F4~FC：步长锁死为特定搭配 000000 */
+const periodStepLocked = computed(() => isHourComboGuide(periodGuide.value));
+
+const periodStepHint = computed(() => {
+  const m = matchedStepForGuide(periodGuide.value);
+  return m?.label || "";
+});
+
+function applyStepForGuide(guide) {
+  const m = matchedStepForGuide(guide);
+  if (!m) return;
+  down.step_unit = m.unit;
+  down.step_value = m.value;
+}
 
 function bitsFromBools(arr) {
   let bits = 0;
@@ -314,8 +335,7 @@ function applyFuncDefaults(code) {
     down.selectedGuides = m.guideSource === "basic" ? ["01", "02", "03"] : ["F4"];
   }
   if (m.schema === "period") {
-    down.step_unit = "N";
-    down.step_value = 5;
+    applyStepForGuide((down.selectedGuides && down.selectedGuides[0]) || "F4");
     ensurePeriodDefaults();
   }
   if (m.schema === "params" && (!down.params?.length || !down.params[0].guide)) {
@@ -456,6 +476,12 @@ function validateBuildParams() {
     return "密码无效（最多 4 位 Hex）";
   }
 
+  if (schema.value === "period") {
+    const g = (down.selectedGuides || [])[0];
+    const stepErr = validatePeriodStep(down.step_unit, down.step_value, g);
+    if (stepErr) return stepErr;
+  }
+
   return null;
 }
 
@@ -568,6 +594,9 @@ function checkBodyIncomplete() {
     if (!endTimeDt.value) miss.push("结束时间");
     if (!(down.selectedGuides || []).length) miss.push("查询要素（仅 1 个）");
     if (miss.length) return `时段查询正文不完整，请填写：${miss.join("、")}`;
+    const g = (down.selectedGuides || [])[0];
+    const stepErr = validatePeriodStep(down.step_unit, down.step_value, g);
+    if (stepErr) return stepErr;
     return null;
   }
   if (s === "guides") {
@@ -632,11 +661,17 @@ function buildPayload() {
     const et = formatProtocolYmdH(endTimeDt.value);
     if (st) payload.start_time = st;
     if (et) payload.end_time = et;
-    payload.step_unit = down.step_unit;
-    payload.step_value = Number(down.step_value) || 5;
-    // HEX/BCD：只编 1 个要素标识
+    // HEX/BCD：只编 1 个要素标识；F4~FC 强制特定搭配步长
     const g = (down.selectedGuides || [])[0];
     payload.guides = g ? [g] : ["F4"];
+    const guide = payload.guides[0];
+    if (isHourComboGuide(guide)) {
+      payload.step_unit = "H";
+      payload.step_value = 0;
+    } else {
+      payload.step_unit = down.step_unit;
+      payload.step_value = Number(down.step_value) || 5;
+    }
   } else if (s === "guides") {
     payload.guides = [...(down.selectedGuides || [])];
   } else if (s === "params") {
@@ -1123,12 +1158,27 @@ async function rtuSendHex() {
               </UFormField>
               <div class="grid grid-cols-2 gap-2">
                 <UFormField label="时间步长单位">
-                  <USelect v-model="down.step_unit" :items="stepUnitItems" value-key="value" class="w-full" />
+                  <USelect
+                    v-model="down.step_unit"
+                    :items="stepUnitItems"
+                    value-key="value"
+                    class="w-full"
+                    :disabled="periodStepLocked"
+                  />
                 </UFormField>
                 <UFormField label="步长值">
-                  <UInput v-model.number="down.step_value" type="number" min="0" />
+                  <UInput
+                    v-model.number="down.step_value"
+                    type="number"
+                    :min="periodStepLocked ? 0 : 1"
+                    :max="down.step_unit === 'D' ? 31 : down.step_unit === 'H' ? 23 : 59"
+                    :disabled="periodStepLocked"
+                  />
                 </UFormField>
               </div>
+              <p v-if="periodStepHint" class="text-xs text-muted m-0 -mt-1">
+                {{ periodStepLocked ? "国标固定搭配：" : "建议匹配步长：" }}{{ periodStepHint }}
+              </p>
               <UFormField label="查询要素">
                 <USelect
                   v-model="periodGuide"

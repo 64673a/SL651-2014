@@ -70,21 +70,48 @@ def encode_bcd_time(s: Optional[str], nbytes: int, now_if_empty: bool = True) ->
 
 
 def encode_time_step(unit: str = "N", value: int = 5) -> bytes:
-    """附录 C.3：04 18 + 3 字节 BCD（日/时/分三选一非零）。
+    """附录 C.3：04 18 + 3 字节 BCD（日/时/分三选一非零；全 0 为特定搭配）。
 
     unit: D=日, H=小时, N=分钟
     """
     u = (unit or "N").upper()
     v = max(0, int(value)) % 100
     d = h = m = 0
-    if u in ("D", "DAY", "日"):
+    if v == 0:
+        # 表 C.1 注 g / 表 C.3：000000 与 DRP/DRZ 固定搭配
+        pass
+    elif u in ("D", "DAY", "日"):
+        if not 1 <= v <= 31:
+            raise ValueError(f"日步长范围 01~31，收到 {v}")
         d = v
     elif u in ("H", "HOUR", "时", "小时"):
+        if not 1 <= v <= 23:
+            raise ValueError(f"小时步长范围 01~23，收到 {v}")
         h = v
     else:
+        if not 1 <= v <= 59:
+            raise ValueError(f"分钟步长范围 01~59，收到 {v}")
         m = v
     dhm = f"{d:02d}{h:02d}{m:02d}"
     return bytes([0x04, 0x18]) + _bcd_digits(dhm, 3)
+
+
+def _is_hour_combo_guide(guide: int) -> bool:
+    """F4H~FCH：DRP/DRZ 1 小时时段组合数据。"""
+    g = guide & 0xFF
+    return 0xF4 <= g <= 0xFC
+
+
+def normalize_period_step(
+    guides: Sequence[Union[int, str]] | None,
+    step_unit: str,
+    step_value: int,
+) -> tuple[str, int]:
+    """38H：F4~FC 强制步长 000000（表 C.1 固定搭配）。"""
+    glist = list(guides or [0xF4])
+    if any(_is_hour_combo_guide(_parse_guide(g)) for g in glist):
+        return "H", 0
+    return step_unit or "N", int(step_value)
 
 
 def _default_info_for_guide(guide: int, func_code: int | None = None) -> int:
@@ -225,7 +252,8 @@ def build_down_body(
         body = bytearray(prefix)
         body += encode_bcd_time(start_time, 4)
         body += encode_bcd_time(end_time, 4)
-        body += encode_time_step(step_unit, step_value)
+        su, sv = normalize_period_step(guides, step_unit, step_value)
+        body += encode_time_step(su, sv)
         for g in guides or [0xF4]:
             body += encode_id_only(_parse_guide(g), fc)
         return bytes(body)

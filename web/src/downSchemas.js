@@ -232,6 +232,67 @@ export const ELEMENT_GUIDE_OPTIONS = [
   { value: "45", label: "45 ZT 状态报警" },
 ];
 
+/** F4~FC：1 小时时段组合数据（DRP/DRZ），须与步长 000000 固定搭配（表 C.1 注 g） */
+export function isHourComboGuide(code) {
+  const n = parseInt(String(code || "").replace(/\s+/g, ""), 16);
+  return Number.isFinite(n) && n >= 0xf4 && n <= 0xfc;
+}
+
+/**
+ * 38H 降水量要素与时间步长匹配（表 45 / 附录 C）。
+ * @returns {{ unit: string, value: number, label: string } | null}
+ */
+export function matchedStepForGuide(code) {
+  const c = String(code || "").replace(/\s+/g, "").toUpperCase();
+  if (isHourComboGuide(c)) {
+    return { unit: "H", value: 0, label: "特定搭配(0) · 与 F4/F5… 固定搭配" };
+  }
+  /** @type {Record<string, { unit: string, value: number, label: string }>} */
+  const map = {
+    "21": { unit: "N", value: 1, label: "1分钟" },
+    "22": { unit: "N", value: 5, label: "5分钟" },
+    "23": { unit: "N", value: 10, label: "10分钟" },
+    "24": { unit: "N", value: 30, label: "30分钟" },
+    "1A": { unit: "H", value: 1, label: "1小时" },
+    "1B": { unit: "H", value: 2, label: "2小时" },
+    "1C": { unit: "H", value: 3, label: "3小时" },
+    "1D": { unit: "H", value: 6, label: "6小时" },
+    "1E": { unit: "H", value: 12, label: "12小时" },
+    "1F": { unit: "D", value: 1, label: "1日" },
+  };
+  return map[c] || null;
+}
+
+/**
+ * 表 C.2/C.3 步长取值校验；F4~FC 仅允许全 0。
+ * @returns {string|null} 错误文案，合法返回 null
+ */
+export function validatePeriodStep(unit, value, guide) {
+  const u = String(unit || "N").toUpperCase();
+  const v = Number(value);
+  if (!Number.isFinite(v) || v < 0) return "步长值无效";
+
+  if (isHourComboGuide(guide)) {
+    if (v !== 0) {
+      return "F4/F5…（DRP/DRZ）须与时间步长 000000 固定搭配，不能填 5 小时等其它步长";
+    }
+    return null;
+  }
+
+  if (v === 0) {
+    return "步长为 0 时要素必须是 F4/F5…（DRP/DRZ）";
+  }
+
+  if (u === "D" || u === "DAY" || u === "日") {
+    if (v < 1 || v > 31) return "日步长范围 01~31";
+  } else if (u === "H" || u === "HOUR" || u === "时" || u === "小时") {
+    if (v < 1 || v > 23) return "小时步长范围 01~23";
+  } else {
+    if (v < 1 || v > 59) return "分钟步长范围 01~59";
+  }
+  return null;
+}
+
 /** 基本配置表 D.1 */
 export const BASIC_GUIDE_OPTIONS = [
   { value: "01", label: "01 中心站地址" },
