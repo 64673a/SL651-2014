@@ -220,15 +220,24 @@ export function getFuncMeta(code) {
 /** 常用要素（3A/38） */
 export const ELEMENT_GUIDE_OPTIONS = [
   { value: "F4", label: "F4 DRP 1小时5分钟雨量" },
-  { value: "20", label: "20 PJ 当前降水量" },
+  { value: "F5", label: "F5 DRZ1 1小时5分钟水位1" },
+  { value: "21", label: "21 PN01 1分钟雨量" },
   { value: "22", label: "22 PN05 5分钟雨量" },
+  { value: "23", label: "23 PN10 10分钟雨量" },
+  { value: "24", label: "24 PN30 30分钟雨量" },
+  { value: "1A", label: "1A P1 1小时雨量" },
+  { value: "1B", label: "1B P2 2小时雨量" },
+  { value: "1C", label: "1C P3 3小时雨量" },
+  { value: "1D", label: "1D P6 6小时雨量" },
+  { value: "1E", label: "1E P12 12小时雨量" },
+  { value: "1F", label: "1F PD 日降水量" },
+  { value: "20", label: "20 PJ 当前降水量" },
   { value: "26", label: "26 PT 累计雨量" },
   { value: "38", label: "38 VT 电源电压" },
   { value: "39", label: "39 Z 河道水位" },
   { value: "3A", label: "3A ZB 库下水位" },
   { value: "3B", label: "3B ZU 库上水位" },
   { value: "27", label: "27 Q 瞬时流量" },
-  { value: "1A", label: "1A P1 1小时雨量" },
   { value: "45", label: "45 ZT 状态报警" },
 ];
 

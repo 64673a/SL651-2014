@@ -280,10 +280,20 @@ const guideSelectItems = computed(() => {
   }
   if (src === "element" && downMeta.value?.element_guides?.length) {
     // 只取常用子集 + 特殊 F4 等
-    const prefer = new Set(["F4", "F5", "20", "22", "26", "38", "39", "3A", "3B", "27", "1A", "45"]);
-    const fromApi = downMeta.value.element_guides
-      .filter((g) => prefer.has(g.code))
-      .map((g) => ({ value: g.code, label: `${g.code} ${g.name}` }));
+    const prefer = new Set([
+      "F4", "F5",
+      "21", "22", "23", "24",
+      "1A", "1B", "1C", "1D", "1E", "1F",
+      "20", "26",
+      "38", "39", "3A", "3B", "27", "45",
+    ]);
+    // 按 prefer 顺序排列，避免 API 返回顺序打乱常用项
+    const byCode = Object.fromEntries(
+      downMeta.value.element_guides.map((g) => [g.code, g])
+    );
+    const fromApi = [...prefer]
+      .filter((code) => byCode[code])
+      .map((code) => ({ value: code, label: `${code} ${byCode[code].name}` }));
     if (fromApi.length) return fromApi;
   }
   return guideOptionsFor(src);
