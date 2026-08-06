@@ -1240,16 +1240,12 @@ async function rtuSendHex() {
                   :model-value="down.elementPreset"
                   :items="elementPresetItems"
                   value-key="value"
-                  class="w-full font-mono"
+                  class="w-full"
                   @update:model-value="applyElementPreset"
                 />
               </UFormField>
               <ul class="text-xs text-muted m-0 pl-4 list-disc space-y-0.5">
-                <li
-                  v-for="(name, i) in currentElementPreset.names"
-                  :key="currentElementPreset.guides[i]"
-                >
-                  <span class="font-mono text-highlighted">{{ currentElementPreset.guides[i] }}</span>
+                <li v-for="name in currentElementPreset.names" :key="name">
                   {{ name }}
                 </li>
               </ul>

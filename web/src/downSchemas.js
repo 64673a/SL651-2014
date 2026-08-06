@@ -250,13 +250,13 @@ export const ELEMENT_GUIDE_OPTIONS = [
 export const ELEMENT_QUERY_PRESETS = [
   {
     value: "combo",
-    label: "F4 F5",
+    label: "1小时内每5分钟时段雨量 + 1小时内5分钟间隔相对水位1",
     guides: ["F4", "F5"],
     names: ["1小时内每5分钟时段雨量", "1小时内5分钟间隔相对水位1"],
   },
   {
     value: "instant",
-    label: "1F 20 26 38 3B",
+    label: "日降水量 + 当前降水量 + 降水量累计值 + 电源电压 + 库(闸、站)上水位",
     guides: ["1F", "20", "26", "38", "3B"],
     names: ["日降水量", "当前降水量", "降水量累计值", "电源电压", "库(闸、站)上水位"],
   },
