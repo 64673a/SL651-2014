@@ -230,10 +230,13 @@ const funcMeta = computed(() => {
 
 const schema = computed(() => funcMeta.value.schema);
 
+/** 遥测站上行 / 链路维持：不下发，从下行调试功能码下拉排除 */
+const UPLINK_ONLY_FUNCS = new Set(["2F", "30", "31", "32", "33", "34", "35"]);
+
 const funcOptions = computed(() => {
   const prefer = [
     "37", "38", "3A", "39", "36", "45", "46", "4A", "51", "41", "43", "40", "42",
-    "49", "47", "48", "4B", "4C", "4D", "4E", "4F", "50", "30", "32", "33",
+    "49", "47", "48", "4B", "4C", "4D", "4E", "4F", "50", "44",
   ];
   const names = {};
   // 本地 + API + props 合并名称
@@ -247,7 +250,7 @@ const funcOptions = computed(() => {
   for (const [code, name] of Object.entries(props.funcCodes || {})) {
     if (!names[code]) names[code] = name;
   }
-  const codes = Object.keys(names);
+  const codes = Object.keys(names).filter((c) => !UPLINK_ONLY_FUNCS.has(c));
   const top = prefer.filter((k) => codes.includes(k));
   const rest = codes.filter((k) => !prefer.includes(k)).sort();
   return [...top, ...rest].map((code) => ({
