@@ -59,26 +59,6 @@ def cmd_parse(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
-def cmd_listen(args: argparse.Namespace) -> int:
-    from .server import CenterStationServer, run_serial
-
-    if args.serial:
-        run_serial(
-            args.serial,
-            baudrate=args.baud,
-            auto_ack=not args.no_ack,
-            encoding=args.encoding,
-        )
-    else:
-        CenterStationServer(
-            host=args.host,
-            port=args.port,
-            auto_ack=not args.no_ack,
-            encoding=args.encoding,
-        ).start()
-    return 0
-
-
 def cmd_web(args: argparse.Namespace) -> int:
     from .webapp import run_web
 
@@ -90,38 +70,6 @@ def cmd_web(args: argparse.Namespace) -> int:
         encoding=args.encoding,
     )
     return 0
-
-
-def cmd_rtu(args: argparse.Namespace) -> int:
-    from .rtu import main as rtu_main
-
-    argv = [
-        "--host",
-        args.host,
-        "--port",
-        str(args.port),
-        "--center",
-        hex(args.center) if isinstance(args.center, int) else str(args.center),
-        "--remote",
-        args.remote,
-        "--password",
-        args.password,
-        "--encoding",
-        args.encoding,
-        "--heartbeat",
-        str(args.heartbeat),
-        "--report",
-        str(args.report),
-        "--water",
-        str(args.water),
-        "--rain",
-        str(args.rain),
-        "--voltage",
-        str(args.voltage),
-    ]
-    if args.once:
-        argv.extend(["--once", args.once])
-    return rtu_main(argv)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -143,19 +91,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.set_defaults(func=cmd_parse)
 
-    sl = sub.add_parser("listen", help="启动中心站监听（TCP 或串口，无 Web）")
-    sl.add_argument("--host", default="0.0.0.0")
-    sl.add_argument("--port", "-p", type=int, default=9000)
-    sl.add_argument("--serial", "-s", help="串口设备")
-    sl.add_argument("--baud", type=int, default=9600)
-    sl.add_argument("--no-ack", action="store_true")
-    sl.add_argument(
-        "--encoding",
-        choices=[C.WIRE_AUTO, C.WIRE_HEX_BCD, C.WIRE_ASCII],
-        default=C.WIRE_AUTO,
-    )
-    sl.set_defaults(func=cmd_listen)
-
     sw = sub.add_parser("web", help="启动 Web 调试控制台（含中心站 TCP）")
     sw.add_argument("--host", default="0.0.0.0", help="Web 监听地址")
     sw.add_argument("--port", "-p", type=int, default=8080, help="Web 端口")
@@ -167,25 +102,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=C.WIRE_HEX_BCD,
     )
     sw.set_defaults(func=cmd_web)
-
-    sr = sub.add_parser("rtu", help="启动模拟 RTU")
-    sr.add_argument("--host", default="127.0.0.1", help="中心站地址")
-    sr.add_argument("--port", type=int, default=9000, help="中心站 TCP 端口")
-    sr.add_argument("--center", type=lambda x: int(x, 0), default=0x01)
-    sr.add_argument("--remote", default="0010100001")
-    sr.add_argument("--password", default="A000")
-    sr.add_argument("--heartbeat", type=float, default=30.0)
-    sr.add_argument("--report", type=float, default=60.0)
-    sr.add_argument(
-        "--encoding",
-        choices=[C.WIRE_HEX_BCD, C.WIRE_ASCII, C.WIRE_AUTO],
-        default=C.WIRE_HEX_BCD,
-    )
-    sr.add_argument("--water", type=float, default=12.34)
-    sr.add_argument("--rain", type=float, default=1.5)
-    sr.add_argument("--voltage", type=float, default=12.6)
-    sr.add_argument("--once", choices=["heartbeat", "report", "alarm"])
-    sr.set_defaults(func=cmd_rtu)
 
     return p
 

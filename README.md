@@ -78,8 +78,7 @@ python3 main.py web --port 8080 --tcp-port 9000
 # 浏览器打开
 open http://127.0.0.1:8080
 
-# 在 Web 页点击「模拟 RTU → 启动」，或终端 2：
-python3 main.py rtu --host 127.0.0.1 --port 9000
+# 在 Web 页「模拟 RTU」面板点击启动
 ```
 
 Web 上可：
@@ -88,24 +87,15 @@ Web 上可：
 - 启动/停止内置模拟 RTU，手动触发心跳/定时报/加报
 - 离线粘贴 hex 解析；清空报文记录
 
-ASCII 字符编码与 HEX/BCD 编码共用同一套中心站、模拟 RTU 和 Web 调试流程。ASCII 帧以 `SOH (01H)` 开始，CLI 解析默认自动识别；下行组帧和模拟 RTU 需要明确选择编码，不能使用 `auto`。
+ASCII 字符编码与 HEX/BCD 编码共用同一套中心站、模拟 RTU 和 Web 调试流程。ASCII 帧以 `SOH (01H)` 开始，CLI 解析默认自动识别；下行组帧和模拟 RTU 需在 Web 上明确选择编码，不能使用 `auto`。
 
 ## 命令一览
 
 ```bash
-# Web 控制台
+# Web 控制台（含中心站 TCP + 模拟 RTU）
 python3 main.py web -p 8080 --tcp-port 9000
-
-# 仅 TCP 中心站（无 Web）
-python3 main.py listen -p 9000
-
-# ASCII 字符编码中心站 / 模拟 RTU
-python3 main.py listen -p 9000 --encoding ascii
-python3 main.py rtu --host 127.0.0.1 --port 9000 --encoding ascii
-
-# 模拟 RTU
-python3 main.py rtu --host 127.0.0.1 --port 9000
-python3 main.py rtu --once report   # 只发一帧定时报
+# ASCII 默认下行编码
+python3 main.py web -p 8080 --tcp-port 9000 --encoding ascii
 
 # 离线解析
 python3 main.py parse -f samples/regular_report.hex

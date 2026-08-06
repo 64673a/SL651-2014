@@ -1,8 +1,10 @@
-"""模拟 RTU（遥测站）：连接中心站，上报心跳/定时报，接收下行"""
+"""模拟 RTU（遥测站）：连接中心站，上报心跳/定时报，接收下行。
+
+由 Web 控制台 `/api/rtu/*` 驱动，不再提供独立 CLI。
+"""
 
 from __future__ import annotations
 
-import argparse
 import socket
 import threading
 import time
@@ -217,67 +219,3 @@ class SimulatedRtu:
             if not self._stop.is_set():
                 print("[RTU] 3s 后重连...")
                 time.sleep(3)
-
-
-def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="SL651 模拟 RTU")
-    p.add_argument("--host", default="127.0.0.1")
-    p.add_argument("--port", type=int, default=9000)
-    p.add_argument("--center", type=lambda x: int(x, 0), default=0x01, help="中心站地址")
-    p.add_argument("--remote", default="0010100001", help="遥测站地址 10 位")
-    p.add_argument("--password", default="A000")
-    p.add_argument("--station-type", type=lambda x: int(x, 0), default=0x48)
-    p.add_argument("--heartbeat", type=float, default=30.0, help="心跳间隔秒，0=关闭")
-    p.add_argument("--report", type=float, default=60.0, help="定时报间隔秒，0=关闭")
-    p.add_argument(
-        "--encoding",
-        choices=[C.WIRE_HEX_BCD, C.WIRE_ASCII],
-        default=C.WIRE_HEX_BCD,
-        help="线路编码；模拟 RTU 发送时不能使用 auto",
-    )
-    p.add_argument("--water", type=float, default=12.34)
-    p.add_argument("--rain", type=float, default=1.5)
-    p.add_argument("--voltage", type=float, default=12.6)
-    p.add_argument("--once", choices=["heartbeat", "report", "alarm"], help="只发一帧后退出")
-    args = p.parse_args(argv)
-
-    rtu = SimulatedRtu(
-        host=args.host,
-        port=args.port,
-        center_addr=args.center,
-        remote_addr=args.remote,
-        password=args.password,
-        station_type=args.station_type,
-        heartbeat_interval=args.heartbeat,
-        report_interval=args.report,
-        encoding=args.encoding,
-        water_level=args.water,
-        rain=args.rain,
-        voltage=args.voltage,
-    )
-
-    if args.once:
-        rtu.connect()
-        if args.once == "heartbeat":
-            rtu.send_heartbeat()
-        elif args.once == "report":
-            rtu.send_report(0x32)
-        else:
-            rtu.send_report(0x33)
-        # 等一下应答
-        try:
-            rtu._sock.settimeout(2)
-            data = rtu._sock.recv(4096)
-            if data:
-                print(f"[RTU] 应答: {bytes_to_hex(data)}")
-        except Exception:
-            pass
-        rtu.close()
-        return 0
-
-    rtu.run()
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

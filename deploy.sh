@@ -23,7 +23,6 @@ usage() {
   logs      查看日志（Ctrl+C 退出）
   status    查看容器状态
   shell     进入容器 shell
-  rtu       在容器旁用本机起一个模拟 RTU（需本机已装依赖）
 
 环境变量:
   WEB_PORT=8080   Web 端口映射
@@ -138,11 +137,6 @@ cmd_shell() {
   docker exec -it "${NAME}" /bin/sh
 }
 
-cmd_rtu() {
-  echo "==> 启动本机模拟 RTU → 127.0.0.1:${TCP_PORT}"
-  exec python3 main.py rtu --host 127.0.0.1 --port "${TCP_PORT}"
-}
-
 case "${1:-}" in
   build)   cmd_build ;;
   start)   cmd_start ;;
@@ -151,7 +145,6 @@ case "${1:-}" in
   logs)    cmd_logs ;;
   status)  cmd_status ;;
   shell)   cmd_shell ;;
-  rtu)     cmd_rtu ;;
   -h|--help|help|"") usage ;;
   *)
     echo "未知命令: $1" >&2
