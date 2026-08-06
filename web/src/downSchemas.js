@@ -85,7 +85,9 @@ export const FUNC_DOWN_META = {
     title: "查询指定要素",
     body_desc: "流水号 + 发报时间 + 要素标识序列(guide+info，无数据体)",
     guideSource: "element",
-    defaultGuides: ["F4"],
+    // 仅两种预设：过程组合 / 瞬时累计
+    defaultGuides: ["F4", "F5"],
+    elementPreset: "combo",
   },
   "40": {
     schema: "params",
@@ -240,6 +242,31 @@ export const ELEMENT_GUIDE_OPTIONS = [
   { value: "27", label: "27 Q 瞬时流量" },
   { value: "45", label: "45 ZT 状态报警" },
 ];
+
+/**
+ * 3A 查询指定要素：仅两种默认模式（样例帧对齐）。
+ * @type {{ value: string, label: string, guides: string[], names: string[] }[]}
+ */
+export const ELEMENT_QUERY_PRESETS = [
+  {
+    value: "combo",
+    label: "F4 F5",
+    guides: ["F4", "F5"],
+    names: ["1小时内每5分钟时段雨量", "1小时内5分钟间隔相对水位1"],
+  },
+  {
+    value: "instant",
+    label: "1F 20 26 38 3B",
+    guides: ["1F", "20", "26", "38", "3B"],
+    names: ["日降水量", "当前降水量", "降水量累计值", "电源电压", "库(闸、站)上水位"],
+  },
+];
+
+export function getElementQueryPreset(value) {
+  return (
+    ELEMENT_QUERY_PRESETS.find((p) => p.value === value) || ELEMENT_QUERY_PRESETS[0]
+  );
+}
 
 /** F4~FC：1 小时时段组合数据（DRP/DRZ），须与步长 000000 固定搭配（表 C.1 注 g） */
 export function isHourComboGuide(code) {

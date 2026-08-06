@@ -18,7 +18,9 @@ import {
   nowDateTime,
 } from "../datetime";
 import {
+  ELEMENT_QUERY_PRESETS,
   FUNC_DOWN_META,
+  getElementQueryPreset,
   getFuncMeta,
   guideOptionsFor,
   isHourComboGuide,
@@ -54,8 +56,10 @@ const down = reactive({
   // F4 默认：表 C.1 特定搭配 000000（DRH00）
   step_unit: "H",
   step_value: 0,
-  // guides（多选 value 列表，如 ["F4","39"]）
-  selectedGuides: ["F4"],
+  // guides（多选 value 列表，如 ["F4","39"]）；3A 由预设写入
+  selectedGuides: ["F4", "F5"],
+  /** 3A 查询模式：combo | instant */
+  elementPreset: "combo",
   // params 40/42
   params: [{ guide: "01", value_hex: "" }],
   // 49
@@ -328,6 +332,23 @@ function applyStepForGuide(guide) {
   down.step_value = m.value;
 }
 
+function applyElementPreset(presetValue) {
+  const p = getElementQueryPreset(presetValue);
+  down.elementPreset = p.value;
+  down.selectedGuides = [...p.guides];
+}
+
+const elementPresetItems = ELEMENT_QUERY_PRESETS.map((p) => ({
+  value: p.value,
+  label: p.label,
+}));
+
+const currentElementPreset = computed(() => getElementQueryPreset(down.elementPreset));
+
+const isElementQuery3A = computed(
+  () => String(down.func_code || "").toUpperCase() === "3A"
+);
+
 function bitsFromBools(arr) {
   let bits = 0;
   (arr || []).forEach((on, i) => {
@@ -339,7 +360,9 @@ function bitsFromBools(arr) {
 function applyFuncDefaults(code) {
   const m = getFuncMeta(code);
   down.end_flag = m.end_flag;
-  if (m.defaultGuides?.length) {
+  if (String(code).toUpperCase() === "3A") {
+    applyElementPreset(m.elementPreset || "combo");
+  } else if (m.defaultGuides?.length) {
     down.selectedGuides = [...m.defaultGuides];
   } else if (m.schema === "guides" || m.schema === "period") {
     down.selectedGuides = m.guideSource === "basic" ? ["01", "02", "03"] : ["F4"];
@@ -446,6 +469,7 @@ function structureKey() {
     step_u: down.step_unit,
     step_v: down.step_value,
     guides: down.selectedGuides,
+    elemPreset: down.elementPreset,
     params: down.params,
     old_p: down.old_password,
     new_p: down.new_password,
@@ -520,6 +544,7 @@ watch(
     down.step_unit,
     down.step_value,
     down.selectedGuides,
+    down.elementPreset,
     down.params,
     down.old_password,
     down.new_password,
@@ -1208,7 +1233,29 @@ async function rtuSendHex() {
               </UFormField>
             </template>
 
-            <!-- 3A / 41 / 43 标识符 -->
+            <!-- 3A 指定要素：仅两种预设 -->
+            <template v-else-if="schema === 'guides' && isElementQuery3A">
+              <UFormField label="查询模式">
+                <USelect
+                  :model-value="down.elementPreset"
+                  :items="elementPresetItems"
+                  value-key="value"
+                  class="w-full font-mono"
+                  @update:model-value="applyElementPreset"
+                />
+              </UFormField>
+              <ul class="text-xs text-muted m-0 pl-4 list-disc space-y-0.5">
+                <li
+                  v-for="(name, i) in currentElementPreset.names"
+                  :key="currentElementPreset.guides[i]"
+                >
+                  <span class="font-mono text-highlighted">{{ currentElementPreset.guides[i] }}</span>
+                  {{ name }}
+                </li>
+              </ul>
+            </template>
+
+            <!-- 41 / 43 标识符多选 -->
             <template v-else-if="schema === 'guides'">
               <UFormField
                 :label="
