@@ -359,10 +359,14 @@ def build_down_command(
 
 
 def down_meta() -> dict[str, Any]:
-    """供前端渲染的元数据。"""
+    """供前端渲染的元数据。
+
+    仅含中心站下行查询/控制（36H–51H）。
+    2FH 链路维持、30H–35H 遥测站上行报不进入下行调试下拉。
+    """
     func_meta = {}
     for fc, name in C.FUNC_CODES.items():
-        if fc < 0x30:
+        if fc < 0x36:
             continue
         ef = default_down_end_flag(fc)
         func_meta[f"{fc:02X}"] = {

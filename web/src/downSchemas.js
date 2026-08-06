@@ -16,42 +16,7 @@
  * }}
  */
 export const FUNC_DOWN_META = {
-  "30": {
-    schema: "simple",
-    end_flag: "1B",
-    title: "确认 · 测试报",
-    body_desc: "仅流水号 + 发报时间（确认帧）",
-  },
-  "31": {
-    schema: "simple",
-    end_flag: "1B",
-    title: "确认 · 均匀时段报",
-    body_desc: "仅流水号 + 发报时间（确认帧）",
-  },
-  "32": {
-    schema: "simple",
-    end_flag: "1B",
-    title: "确认 · 定时报",
-    body_desc: "仅流水号 + 发报时间（确认帧）",
-  },
-  "33": {
-    schema: "simple",
-    end_flag: "1B",
-    title: "确认 · 加报",
-    body_desc: "仅流水号 + 发报时间（确认帧）",
-  },
-  "34": {
-    schema: "simple",
-    end_flag: "1B",
-    title: "确认 · 小时报",
-    body_desc: "仅流水号 + 发报时间（确认帧）",
-  },
-  "35": {
-    schema: "simple",
-    end_flag: "1B",
-    title: "确认 · 人工置数报",
-    body_desc: "仅流水号 + 发报时间（确认帧）",
-  },
+  // 2F / 30–35 为遥测站上行或链路维持，不出现在中心站下行调试下拉
   "36": {
     schema: "simple",
     end_flag: "05",
