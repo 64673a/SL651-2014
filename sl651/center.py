@@ -16,6 +16,9 @@ from .framer import FrameSplitter
 from .hexutil import bytes_to_hex, hex_to_bytes
 from .parser import parse_frame
 
+# 6.6.4.2：链路维持报（2FH）用于保活，明确「没有下行报文」
+_NO_AUTO_ACK_FUNCS = {0x2F}
+
 # 无上行数据超过该秒数则踢掉（应对断电后的半开 TCP）
 _DEFAULT_IDLE_TIMEOUT = 180.0
 
@@ -281,7 +284,12 @@ class CenterHub:
                     )
                     self.bus.emit("clients", self.list_clients())
 
-                    if self.auto_ack and frame and frame.header.direction == "up":
+                    if (
+                        self.auto_ack
+                        and frame
+                        and frame.header.direction == "up"
+                        and frame.header.func_code not in _NO_AUTO_ACK_FUNCS
+                    ):
                         try:
                             ack = build_ack(frame)
                             conn.sendall(ack)
