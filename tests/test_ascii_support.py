@@ -182,6 +182,40 @@ class AsciiSupportTests(unittest.TestCase):
         )
         self.assertTrue(body.endswith(b"01 03 "))
 
+    def test_hex_m3_round_trip_and_ack(self):
+        body = bytes.fromhex("0001240109160128")
+        frame = build_up_frame(
+            1,
+            "0010100001",
+            "A000",
+            0x2F,
+            body,
+            packet_total=3,
+            packet_seq=1,
+        )
+        self.assertEqual(frame[14:17], bytes.fromhex("003001"))
+
+        parsed = parse_frame(frame)
+        self.assertTrue(parsed.header.m3)
+        self.assertEqual(parsed.header.packet_total, 3)
+        self.assertEqual(parsed.header.packet_seq, 1)
+        self.assertEqual(parsed.errors, [])
+        self.assertTrue(parsed.crc_ok)
+
+        fields_by_id = {field.id: field for field in parsed.fields}
+        self.assertEqual(fields_by_id["pkt"].start, 14)
+        self.assertEqual(fields_by_id["pkt"].end, 17)
+        self.assertIn("总数=3", fields_by_id["pkt"].value)
+        self.assertIn("序号=1", fields_by_id["pkt"].value)
+
+        ack = build_ack(parsed)
+        ack_parsed = parse_frame(ack)
+        self.assertTrue(ack_parsed.header.m3)
+        self.assertEqual(ack_parsed.header.packet_total, 3)
+        self.assertEqual(ack_parsed.header.packet_seq, 3)
+        self.assertEqual(ack[14:17], bytes.fromhex("003003"))
+        self.assertTrue(ack_parsed.crc_ok)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -908,8 +908,16 @@ def _build_layout(
         )
 
     if header.m3 and n >= 17:
-        add("pkt_total", "包总数", 14, 15, str(header.packet_total), "header", "warning")
-        add("pkt_seq", "包序号", 15, 17, str(header.packet_seq), "header", "warning")
+        # 高/低 12 位挤在同一 3 字节里，布局按整段标注
+        add(
+            "pkt",
+            "包总数及序列号",
+            14,
+            17,
+            f"总数={header.packet_total} 序号={header.packet_seq}",
+            "header",
+            "warning",
+        )
 
     for fid, label, s, e, val, color in body_fields:
         add(fid, label, body_offset + s, body_offset + e, val, "body", color)
@@ -1000,15 +1008,18 @@ def parse_frame(raw: bytes, encoding: str = C.WIRE_AUTO) -> ParsedFrame:
     if m3:
         if len(raw) < 17:
             raise ValueError("M3 帧过短")
-        packet_total = raw[14]
-        packet_seq = _u16(raw, 15) & 0x0FFF
+        # 表22：3 字节 HEX，高 12 位包总数、低 12 位包序号（1~4095）
+        pkt = int.from_bytes(raw[14:17], "big")
+        packet_total = (pkt >> 12) & 0xFFF
+        packet_seq = pkt & 0xFFF
         body_offset = 17
 
     end_pos = len(raw) - 3
     body = raw[body_offset:end_pos]
-
-    if body_len and len(body) != body_len and not m3:
-        errors.append(f"正文长度不一致: 字段={body_len}, 实际={len(body)}")
+    # 长度字段含 SYN 后至结束符前全部字节（M3 含包总数/序号 3 字节）
+    wire_body_len = end_pos - 14
+    if body_len and wire_body_len != body_len:
+        errors.append(f"正文长度不一致: 字段={body_len}, 实际={wire_body_len}")
 
     header = FrameHeader(
         center_addr=center,
