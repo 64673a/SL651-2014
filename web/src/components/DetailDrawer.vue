@@ -19,6 +19,8 @@ const activeId = ref(null);
 const hoverFieldId = ref(null);
 const hoverOffset = ref(null);
 const showJson = ref(false);
+/** ASCII 帧：原始报文(hex 字节图) / ASCII 字符文本 */
+const rawMode = ref("hex");
 
 watch(
   () => props.message,
@@ -30,6 +32,7 @@ watch(
       hoverFieldId.value = null;
       hoverOffset.value = null;
       showJson.value = false;
+      rawMode.value = "hex";
     } else if (open.value) {
       // 父组件直接清空时：先关动画，内容保留到 after:leave
       open.value = false;
@@ -47,6 +50,7 @@ function onAfterLeave() {
   hoverFieldId.value = null;
   hoverOffset.value = null;
   showJson.value = false;
+  rawMode.value = "hex";
   emit("close");
 }
 
@@ -133,20 +137,62 @@ const rawHexSpaced = computed(() =>
   rawHex.value.replace(/(.{2})/g, "$1 ").trim()
 );
 
+const CTRL_ASCII = {
+  0x01: "<SOH>",
+  0x02: "<STX>",
+  0x03: "<ETX>",
+  0x04: "<EOT>",
+  0x05: "<ENQ>",
+  0x06: "<ACK>",
+  0x15: "<NAK>",
+  0x16: "<SYN>",
+  0x17: "<ETB>",
+  0x1b: "<ESC>",
+};
+
+/** 与后端 _ascii_display 一致：控制符用名称，可打印 ASCII 原样 */
+const rawAsciiText = computed(() => {
+  const fromParsed = String(parsed.value?.raw_text || "").trim();
+  if (fromParsed) return fromParsed;
+  if (!bytes.value.length) return "";
+  return bytes.value
+    .map((b) => {
+      const code = Number.parseInt(b.hex, 16);
+      if (CTRL_ASCII[code]) return CTRL_ASCII[code];
+      if (code >= 0x20 && code <= 0x7e) return String.fromCharCode(code);
+      return `\\x${b.hex}`;
+    })
+    .join("");
+});
+
+const isAsciiFrame = computed(() => encoding.value === "ascii");
+
+const rawModeItems = [
+  { label: "原始报文", value: "hex" },
+  { label: "ASCII 字符", value: "ascii" },
+];
+
 const toast = useToast();
 
-async function copyRawHex() {
-  const text = rawHexSpaced.value || rawHex.value;
+async function copyText(text, okTitle) {
   if (!text) {
-    toast.add({ title: "无原始报文", color: "warning" });
+    toast.add({ title: "无可复制内容", color: "warning" });
     return;
   }
   try {
     await writeClipboard(text);
-    toast.add({ title: "已复制原始报文", color: "success" });
+    toast.add({ title: okTitle, color: "success" });
   } catch {
     toast.add({ title: "复制失败", color: "error" });
   }
+}
+
+async function copyRawHex() {
+  await copyText(rawHexSpaced.value || rawHex.value, "已复制原始报文");
+}
+
+async function copyRawAscii() {
+  await copyText(rawAsciiText.value, "已复制 ASCII 字符");
 }
 
 // 展示用精简 JSON：去掉顶层摘要展平与 parsed.raw_hex 等重复
@@ -198,23 +244,51 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
 
           <div>
             <div class="flex items-center justify-between gap-2 mb-2">
-              <p class="text-xs font-semibold text-muted">原始报文</p>
-              <UButton
-                size="xs"
-                color="neutral"
-                variant="soft"
-                icon="i-lucide-copy"
-                :disabled="!rawHex"
-                @click="copyRawHex"
-              >
-                复制
-              </UButton>
+              <div class="flex items-center gap-2 min-w-0">
+                <UTabs
+                  v-if="isAsciiFrame"
+                  v-model="rawMode"
+                  :items="rawModeItems"
+                  :content="false"
+                  size="xs"
+                  class="w-auto"
+                />
+                <p v-else class="text-xs font-semibold text-muted">原始报文</p>
+              </div>
+              <div class="flex shrink-0 items-center gap-1.5">
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="soft"
+                  icon="i-lucide-copy"
+                  :disabled="!rawHex"
+                  @click="copyRawHex"
+                >
+                  {{ isAsciiFrame ? "复制 Hex" : "复制" }}
+                </UButton>
+                <UButton
+                  v-if="isAsciiFrame"
+                  size="xs"
+                  color="neutral"
+                  variant="soft"
+                  icon="i-lucide-type"
+                  :disabled="!rawAsciiText"
+                  @click="copyRawAscii"
+                >
+                  复制 ASCII
+                </UButton>
+              </div>
             </div>
             <div class="rounded-lg border border-default p-3 max-h-[36vh] overflow-y-auto bg-elevated/30">
+              <pre
+                v-if="isAsciiFrame && rawMode === 'ascii'"
+                class="font-mono text-sm text-toned whitespace-pre-wrap break-all m-0 leading-relaxed"
+              >{{ rawAsciiText || "—" }}</pre>
               <HexMap
+                v-else
                 :bytes="bytes"
                 :fields="fields"
-                :show-ascii="encoding === 'ascii'"
+                :show-ascii="isAsciiFrame"
                 :highlight-id="highlightId"
                 :hover-offset="hoverOffset"
                 @hover-byte="onHoverByte"

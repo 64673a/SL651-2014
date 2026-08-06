@@ -310,6 +310,7 @@ onUnmounted(() => unsubWs?.());
             :rtu="status.rtu"
             :center-port="status.center.port"
             @refresh="refreshStatus"
+            @open-detail="selected = $event"
           />
         </div>
 

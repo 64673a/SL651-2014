@@ -12,6 +12,7 @@ import {
 } from "vue";
 import { get, post } from "../api";
 import {
+  formatDisplayDateTime,
   formatProtocolYmdH,
   formatProtocolYmdHms,
   nowDateTime,
@@ -31,7 +32,7 @@ const props = defineProps({
   rtu: { type: Object, default: null },
   centerPort: { type: [Number, String], default: 9000 },
 });
-const emit = defineEmits(["refresh"]);
+const emit = defineEmits(["refresh", "open-detail"]);
 const toast = useToast();
 
 const peer = ref("");
@@ -116,7 +117,8 @@ const hexRaw = ref("");
 /** 预览：完整帧 / 正文 / 结束符 / 解析 */
 const previewFrame = ref(null); // { hex, body_hex, end_flag, parsedText, error, spaced }
 const parseHex = ref("");
-const parseResult = ref("");
+const parseEncoding = ref("auto");
+const parseLoading = ref(false);
 const sending = ref(false);
 const previewing = ref(false);
 
@@ -170,6 +172,12 @@ const modeItems = [
 ];
 
 const encodingItems = [
+  { label: "HEX/BCD（二进制）", value: "hex_bcd" },
+  { label: "ASCII 字符编码", value: "ascii" },
+];
+
+const parseEncodingItems = [
+  { label: "自动识别（7E7E / 01）", value: "auto" },
   { label: "HEX/BCD（二进制）", value: "hex_bcd" },
   { label: "ASCII 字符编码", value: "ascii" },
 ];
@@ -830,12 +838,41 @@ function removeParamRow(i) {
 }
 
 async function doParse() {
-  if (parseResult.value) {
-    parseResult.value = "";
+  const hex = String(parseHex.value || "").trim();
+  if (!hex) {
+    toast.add({ title: "请粘贴报文 hex", color: "warning" });
     return;
   }
-  const r = await post("/api/parse", { hex: parseHex.value });
-  parseResult.value = r.ok ? prettySlimParsed(r.parsed) : "错误: " + r.error;
+  parseLoading.value = true;
+  try {
+    const r = await post("/api/parse", { hex, encoding: parseEncoding.value });
+    if (!r.ok) {
+      toast.add({ title: r.error || "解析失败", color: "error" });
+      return;
+    }
+    const parsed = r.parsed || {};
+    const header = parsed.header || {};
+    const body = parsed.body || {};
+    emit("open-detail", {
+      id: `offline-${Date.now()}`,
+      ts: formatDisplayDateTime(nowDateTime()),
+      direction: header.direction || "up",
+      peer: "离线解析",
+      raw_hex: parsed.raw_hex || hex.replace(/\s+/g, "").toUpperCase(),
+      parsed,
+      note: "离线解析",
+      crc_ok: parsed.crc_ok,
+      encoding: header.encoding,
+      func_code: header.func_code,
+      func_name: header.func_name,
+      remote_addr: header.remote_addr || body.remote_addr,
+      center_addr: header.center_addr,
+      serial_no: body.serial_no,
+      send_time: body.send_time,
+    });
+  } finally {
+    parseLoading.value = false;
+  }
 }
 
 async function rtuStart() {
@@ -1272,7 +1309,7 @@ async function rtuSendHex() {
             <UTextarea
               v-model="hexRaw"
               :rows="5"
-              placeholder="7E7E..."
+              placeholder="7E7E... 或 01...（ASCII）"
               class="w-full font-mono text-xs"
               :ui="{ base: 'w-full min-h-[7rem]' }"
             />
@@ -1347,7 +1384,7 @@ async function rtuSendHex() {
           <UTextarea
             v-model="rtuHex"
             :rows="5"
-            placeholder="7E7E... 完整帧（含 CRC）"
+            placeholder="7E7E... 或 01... 完整帧（含 CRC）"
             class="w-full font-mono text-xs"
             :ui="{ base: 'w-full min-h-[7rem]' }"
           />
@@ -1367,23 +1404,29 @@ async function rtuSendHex() {
         </div>
       </template>
       <div class="flex flex-col gap-3">
+        <UFormField label="线路编码">
+          <USelect
+            v-model="parseEncoding"
+            :items="parseEncodingItems"
+            value-key="value"
+            class="w-full"
+          />
+        </UFormField>
         <UTextarea
           v-model="parseHex"
           :rows="4"
-          placeholder="粘贴 7E7E... 报文"
+          placeholder="粘贴 7E7E... 或 01...（ASCII）报文"
           class="w-full font-mono text-xs"
           :ui="{ base: 'w-full min-h-[6rem]' }"
         />
         <UButton
           color="primary"
-          :icon="parseResult ? 'i-lucide-chevrons-up' : 'i-lucide-scan-search'"
+          icon="i-lucide-scan-search"
+          :loading="parseLoading"
           @click="doParse"
         >
-          {{ parseResult ? "收起" : "解析" }}
+          解析并查看详情
         </UButton>
-        <UCard v-if="parseResult" :ui="{ body: 'p-3 max-h-48 overflow-auto' }">
-          <pre class="font-mono text-xs whitespace-pre-wrap break-all m-0">{{ parseResult }}</pre>
-        </UCard>
       </div>
     </UCard>
   </aside>

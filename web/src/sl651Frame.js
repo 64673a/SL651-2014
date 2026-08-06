@@ -6,8 +6,8 @@
 const POLY = 0xa001;
 const INIT = 0xffff;
 
-/** 帧内：7E7E(2)+遥测站5+中心1+密码2+功能码1+长度2+STX(1)=14，正文流水号2后即为发报时间 */
-export const SEND_TIME_ABS_OFFSET = 16; // 绝对字节偏移
+/** HEX/BCD 帧：7E7E(2)+头 11+STX(1)=14，正文流水号 2 后即为发报时间（BCD6）。ASCII 帧见 patchFrameSendTime。 */
+export const SEND_TIME_ABS_OFFSET = 16; // HEX/BCD 绝对字节偏移
 export const SEND_TIME_LEN = 6;
 
 export function crc16(data) {
