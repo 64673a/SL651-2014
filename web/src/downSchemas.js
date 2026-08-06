@@ -245,7 +245,8 @@ export function isHourComboGuide(code) {
 export function matchedStepForGuide(code) {
   const c = String(code || "").replace(/\s+/g, "").toUpperCase();
   if (isHourComboGuide(c)) {
-    return { unit: "H", value: 0, label: "特定搭配(0) · 与 F4/F5… 固定搭配" };
+    // HEX 为 000000；ASCII 用 DRH00。UI 不展示「小时」，避免与 F4 的 5 分钟语义混淆。
+    return { unit: "H", value: 0, label: "特定搭配 000000" };
   }
   /** @type {Record<string, { unit: string, value: number, label: string }>} */
   const map = {

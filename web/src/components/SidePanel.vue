@@ -1156,29 +1156,38 @@ async function rtuSendHex() {
                   </template>
                 </UInputDate>
               </UFormField>
-              <div class="grid grid-cols-2 gap-2">
-                <UFormField label="时间步长单位">
-                  <USelect
-                    v-model="down.step_unit"
-                    :items="stepUnitItems"
-                    value-key="value"
-                    class="w-full"
-                    :disabled="periodStepLocked"
-                  />
-                </UFormField>
-                <UFormField label="步长值">
+              <template v-if="periodStepLocked">
+                <UFormField label="时间步长">
                   <UInput
-                    v-model.number="down.step_value"
-                    type="number"
-                    :min="periodStepLocked ? 0 : 1"
-                    :max="down.step_unit === 'D' ? 31 : down.step_unit === 'H' ? 23 : 59"
-                    :disabled="periodStepLocked"
+                    model-value="特定搭配 000000（F4/F5… 固定，内含每5分钟）"
+                    disabled
+                    class="w-full"
                   />
                 </UFormField>
-              </div>
-              <p v-if="periodStepHint" class="text-xs text-muted m-0 -mt-1">
-                {{ periodStepLocked ? "国标固定搭配：" : "建议匹配步长：" }}{{ periodStepHint }}
-              </p>
+              </template>
+              <template v-else>
+                <div class="grid grid-cols-2 gap-2">
+                  <UFormField label="时间步长单位">
+                    <USelect
+                      v-model="down.step_unit"
+                      :items="stepUnitItems"
+                      value-key="value"
+                      class="w-full"
+                    />
+                  </UFormField>
+                  <UFormField label="步长值">
+                    <UInput
+                      v-model.number="down.step_value"
+                      type="number"
+                      min="1"
+                      :max="down.step_unit === 'D' ? 31 : down.step_unit === 'H' ? 23 : 59"
+                    />
+                  </UFormField>
+                </div>
+                <p v-if="periodStepHint" class="text-xs text-muted m-0 -mt-1">
+                  建议匹配步长：{{ periodStepHint }}
+                </p>
+              </template>
               <UFormField label="查询要素">
                 <USelect
                   v-model="periodGuide"
