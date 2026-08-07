@@ -40,6 +40,12 @@ watch(
   }
 );
 
+// 切换原始/ASCII 视图时上层高度变化，字段 mouseleave 可能不触发，清掉悬停高亮
+watch(rawMode, () => {
+  hoverFieldId.value = null;
+  hoverOffset.value = null;
+});
+
 function requestClose() {
   open.value = false;
 }
