@@ -5,7 +5,7 @@ const props = defineProps({
   bytes: { type: Array, default: () => [] },
   fields: { type: Array, default: () => [] },
   showAscii: { type: Boolean, default: false },
-  /** 当前高亮字段（悬停优先，否则为点击锁定） */
+  /** 当前高亮字段（悬停） */
   highlightId: { type: String, default: null },
   hoverOffset: { type: Number, default: null },
 });

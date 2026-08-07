@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { formatAnyToDisplay } from "../datetime";
 import HexMap from "./HexMap.vue";
 import { prettySlimMessage } from "../formatJson";
@@ -13,14 +13,13 @@ const emit = defineEmits(["close"]);
 const localMessage = ref(null);
 const open = ref(false);
 
-/** 点击锁定的字段 */
-const activeId = ref(null);
-/** 悬停临时字段 */
+/** 悬停临时字段（仅悬停，不锁定） */
 const hoverFieldId = ref(null);
 const hoverOffset = ref(null);
 const showJson = ref(false);
 /** ASCII 帧：原始报文(hex 字节图) / ASCII 字符文本 */
 const rawMode = ref("hex");
+const fieldListEl = ref(null);
 
 watch(
   () => props.message,
@@ -28,7 +27,6 @@ watch(
     if (msg) {
       localMessage.value = msg;
       open.value = true;
-      activeId.value = null;
       hoverFieldId.value = null;
       hoverOffset.value = null;
       showJson.value = false;
@@ -52,7 +50,6 @@ function requestClose() {
 
 function onAfterLeave() {
   localMessage.value = null;
-  activeId.value = null;
   hoverFieldId.value = null;
   hoverOffset.value = null;
   showJson.value = false;
@@ -89,7 +86,7 @@ const groups = computed(() => {
     .filter((g) => g.items.length);
 });
 
-const highlightId = computed(() => hoverFieldId.value || activeId.value);
+const highlightId = computed(() => hoverFieldId.value);
 
 const fieldByOffset = computed(() => {
   const map = new Map();
@@ -112,8 +109,15 @@ function onHexLeave() {
   hoverFieldId.value = null;
 }
 
-function onClickField(id) {
-  activeId.value = id;
+/** 点击上方字节块：下方字段列表滚动到对应项 */
+async function onClickByteField(id) {
+  if (!id) return;
+  hoverFieldId.value = id;
+  const field = fields.value.find((f) => f.id === id);
+  if (field) hoverOffset.value = field.start;
+  await nextTick();
+  const el = fieldListEl.value?.querySelector(`[data-field-id="${CSS.escape(id)}"]`);
+  el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function onFieldEnter(f) {
@@ -299,22 +303,22 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
                 :hover-offset="hoverOffset"
                 @hover-byte="onHoverByte"
                 @leave="onHexLeave"
-                @click-field="onClickField"
+                @click-field="onClickByteField"
               />
             </div>
           </div>
         </div>
 
-        <div class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
+        <div ref="fieldListEl" class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
           <div v-for="g in groups" :key="g.key">
             <p class="text-xs font-semibold text-muted mb-2">
               {{ g.label }}
             </p>
             <div class="flex flex-col gap-1">
-              <button
+              <div
                 v-for="f in g.items"
                 :key="f.id"
-                type="button"
+                :data-field-id="f.id"
                 class="flex items-start gap-3 rounded-lg border px-3 py-2 text-left transition"
                 :class="
                   highlightId === f.id
@@ -323,7 +327,6 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
                 "
                 @mouseenter="onFieldEnter(f)"
                 @mouseleave="onFieldLeave"
-                @click="onClickField(f.id)"
               >
                 <span
                   class="mt-1 size-2.5 shrink-0 rounded-full"
@@ -346,7 +349,7 @@ const pretty = computed(() => (message.value ? prettySlimMessage(message.value) 
                   <p class="text-sm text-toned truncate">{{ f.value }}</p>
                   <p class="font-mono text-[11px] text-muted truncate">{{ fieldHex(f) }}</p>
                 </div>
-              </button>
+              </div>
             </div>
           </div>
 
