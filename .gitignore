@@ -13,5 +13,7 @@ web/dist/
 web/auto-imports.d.ts
 web/components.d.ts
 web/.nuxt-ui/
+# Vite 构建产物（本地 `cd web && npm run build`；Docker 镜像内构建）
+sl651/static/
 /.codegraph/
 AGENTS.md
