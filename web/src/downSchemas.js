@@ -58,8 +58,9 @@ export const FUNC_DOWN_META = {
     schema: "params",
     end_flag: "05",
     title: "修改基本配置",
-    body_desc: "流水号 + 发报时间 + 参数标识 + 数据",
+    body_desc: "流水号 + 发报时间 + 固定配置项（01/02/04/05/0C/0D/0F）",
     guideSource: "basic",
+    basicConfigForm: true,
   },
   "41": {
     schema: "guides",
@@ -328,4 +329,142 @@ export function guideOptionsFor(source) {
   if (source === "basic") return BASIC_GUIDE_OPTIONS;
   if (source === "run") return RUN_GUIDE_OPTIONS;
   return ELEMENT_GUIDE_OPTIONS;
+}
+
+/** 40H 修改基本配置：固定可编辑项（对齐样例帧） */
+export const WORK_MODE_OPTIONS = [
+  { value: 1, label: "自报工作状态" },
+  { value: 2, label: "自报确认工作状态" },
+  { value: 3, label: "查询/应答工作状态" },
+  { value: 4, label: "调试或维修状态" },
+];
+
+/** 附录 D 信道类型（BCD 单字节） */
+export const CHANNEL_TYPE_OPTIONS = [
+  { value: 0, label: "禁用" },
+  { value: 1, label: "短信" },
+  { value: 2, label: "IPV4" },
+  { value: 3, label: "北斗" },
+  { value: 4, label: "海事卫星" },
+  { value: 5, label: "PSTN" },
+  { value: 6, label: "超短波" },
+];
+
+export function defaultBasicConfigForm() {
+  return {
+    centers: [10, 0, 0, 0],
+    remote_addr: "0011223344",
+    main_channel_type: 2,
+    main_ip: "118.178.94.91",
+    main_port: 9090,
+    main_phone: "",
+    main_addr_hex: "",
+    backup_phone: "013987654321",
+    work_mode: 2,
+    device_id: "013012345678",
+  };
+}
+
+/** 40H 采集要素固定：降水量 + 水位1（表 D.2） */
+export const LOCKED_COLLECT_HEX = "8001000000000000";
+
+function _padEvenHex(s) {
+  const h = String(s || "").replace(/\s+/g, "").toUpperCase();
+  return h.length % 2 ? `0${h}` : h;
+}
+
+function _byteHex(n) {
+  const v = Math.max(0, Math.min(255, Number(n) || 0));
+  return v.toString(16).toUpperCase().padStart(2, "0");
+}
+
+function _bcdTypeByte(type) {
+  const t = Math.max(0, Math.min(99, Number(type) || 0));
+  return String(t).padStart(2, "0");
+}
+
+function _encodeMainChannel(f) {
+  const type = Math.max(0, Math.min(6, Number(f.main_channel_type) || 0));
+  const typeHex = _bcdTypeByte(type);
+  if (type === 0) return typeHex;
+  if (type === 2) {
+    const ipParts = String(f.main_ip || "0.0.0.0")
+      .split(".")
+      .map((x) => Math.max(0, Math.min(255, parseInt(x, 10) || 0)));
+    while (ipParts.length < 4) ipParts.push(0);
+    const ipBcd = ipParts
+      .slice(0, 4)
+      .map((n) => String(n).padStart(3, "0"))
+      .join("");
+    const portBcd = String(Math.max(0, Number(f.main_port) || 0))
+      .padStart(6, "0")
+      .slice(-6);
+    return `${typeHex}${ipBcd}${portBcd}`;
+  }
+  if (type === 1) {
+    let phone = String(f.main_phone || "").replace(/\D/g, "");
+    if (phone.length % 2) phone = `0${phone}`;
+    return `${typeHex}${phone}`;
+  }
+  // 北斗 / 海事 / PSTN / 超短波：自由 Hex 地址
+  return `${typeHex}${_padEvenHex(f.main_addr_hex)}`;
+}
+
+/** 将表单编成 40H params：[{guide, value_hex}, ...] */
+export function basicConfigFormToParams(form) {
+  const f = form || defaultBasicConfigForm();
+  const centers = (f.centers || [0, 0, 0, 0]).slice(0, 4);
+  while (centers.length < 4) centers.push(0);
+
+  const remote = String(f.remote_addr || "")
+    .replace(/\D/g, "")
+    .padStart(10, "0")
+    .slice(-10);
+
+  const mainCh = _encodeMainChannel(f);
+
+  let phone = String(f.backup_phone || "").replace(/\D/g, "");
+  if (phone.length % 2) phone = `0${phone}`;
+  const backupCh = `01${phone}`;
+
+  const mode = Math.max(1, Math.min(4, Number(f.work_mode) || 2));
+  const work = String(mode).padStart(2, "0");
+
+  const collect = LOCKED_COLLECT_HEX;
+
+  const deviceNum = String(f.device_id || "").replace(/[^\dA-Za-z]/g, "");
+  const deviceAscii = [...deviceNum]
+    .map((c) => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"))
+    .join("");
+  const device = `31${deviceAscii}`;
+
+  return [
+    { guide: "01", value_hex: centers.map(_byteHex).join("") },
+    { guide: "02", value_hex: remote },
+    { guide: "04", value_hex: mainCh },
+    { guide: "05", value_hex: backupCh },
+    { guide: "0C", value_hex: work },
+    { guide: "0D", value_hex: collect },
+    { guide: "0F", value_hex: device },
+  ];
+}
+
+export function validateBasicConfigForm(form) {
+  const f = form || {};
+  if (!String(f.remote_addr || "").replace(/\D/g, "")) return "请填写遥测站地址";
+  const type = Number(f.main_channel_type);
+  if (type === 2) {
+    if (!String(f.main_ip || "").trim()) return "请填写主信道 IP";
+    if (!(Number(f.main_port) > 0)) return "请填写主信道端口";
+  } else if (type === 1) {
+    if (!String(f.main_phone || "").replace(/\D/g, "")) return "请填写主信道短信号码";
+  } else if (type > 2) {
+    const hex = String(f.main_addr_hex || "").replace(/\s+/g, "");
+    if (!hex || !/^[0-9A-Fa-f]*$/.test(hex) || hex.length % 2) {
+      return "请填写主信道地址 Hex（偶数位）";
+    }
+  }
+  if (!String(f.backup_phone || "").replace(/\D/g, "")) return "请填写备用短信号码";
+  if (!String(f.device_id || "").trim()) return "请填写通信卡识别号";
+  return null;
 }

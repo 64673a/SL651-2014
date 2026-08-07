@@ -20,11 +20,16 @@ import {
 import {
   ELEMENT_QUERY_PRESETS,
   FUNC_DOWN_META,
+  WORK_MODE_OPTIONS,
+  CHANNEL_TYPE_OPTIONS,
+  basicConfigFormToParams,
+  defaultBasicConfigForm,
   getElementQueryPreset,
   getFuncMeta,
   guideOptionsFor,
   isHourComboGuide,
   matchedStepForGuide,
+  validateBasicConfigForm,
   validatePeriodStep,
 } from "../downSchemas";
 import { prettySlimParsed } from "../formatJson";
@@ -62,6 +67,8 @@ const down = reactive({
   elementPreset: "combo",
   // params 40/42
   params: [{ guide: "01", value_hex: "" }],
+  /** 40H 固定表单 */
+  basicConfig: defaultBasicConfigForm(),
   // 49
   old_password: "A000",
   new_password: "1234",
@@ -238,10 +245,6 @@ const schema = computed(() => funcMeta.value.schema);
 const UPLINK_ONLY_FUNCS = new Set(["2F", "30", "31", "32", "33", "34", "35"]);
 
 const funcOptions = computed(() => {
-  const prefer = [
-    "37", "38", "3A", "39", "36", "45", "46", "4A", "51", "41", "43", "40", "42",
-    "49", "47", "48", "4B", "4C", "4D", "4E", "4F", "50", "44",
-  ];
   const names = {};
   // 本地 + API + props 合并名称
   for (const [code, m] of Object.entries(FUNC_DOWN_META)) {
@@ -254,13 +257,13 @@ const funcOptions = computed(() => {
   for (const [code, name] of Object.entries(props.funcCodes || {})) {
     if (!names[code]) names[code] = name;
   }
-  const codes = Object.keys(names).filter((c) => !UPLINK_ONLY_FUNCS.has(c));
-  const top = prefer.filter((k) => codes.includes(k));
-  const rest = codes.filter((k) => !prefer.includes(k)).sort();
-  return [...top, ...rest].map((code) => ({
-    label: `${code} ${names[code]}`,
-    value: code,
-  }));
+  return Object.keys(names)
+    .filter((c) => !UPLINK_ONLY_FUNCS.has(c))
+    .sort((a, b) => parseInt(a, 16) - parseInt(b, 16))
+    .map((code) => ({
+      label: `${code} ${names[code]}`,
+      value: code,
+    }));
 });
 
 const peerItems = computed(() =>
@@ -352,6 +355,14 @@ const isElementQuery3A = computed(
   () => String(down.func_code || "").toUpperCase() === "3A"
 );
 
+const isBasicConfig40 = computed(
+  () => String(down.func_code || "").toUpperCase() === "40"
+);
+
+const workModeItems = WORK_MODE_OPTIONS;
+const channelTypeItems = CHANNEL_TYPE_OPTIONS;
+const mainChannelType = computed(() => Number(down.basicConfig?.main_channel_type) || 0);
+
 function bitsFromBools(arr) {
   let bits = 0;
   (arr || []).forEach((on, i) => {
@@ -374,7 +385,10 @@ function applyFuncDefaults(code) {
     applyStepForGuide((down.selectedGuides && down.selectedGuides[0]) || "F4");
     ensurePeriodDefaults();
   }
-  if (m.schema === "params" && (!down.params?.length || !down.params[0].guide)) {
+  if (String(code).toUpperCase() === "40") {
+    down.basicConfig = defaultBasicConfigForm();
+    down.params = basicConfigFormToParams(down.basicConfig);
+  } else if (m.schema === "params" && (!down.params?.length || !down.params[0].guide)) {
     const def = m.guideSource === "run" ? "20" : "01";
     down.params = [{ guide: def, value_hex: "" }];
   }
@@ -474,6 +488,7 @@ function structureKey() {
     guides: down.selectedGuides,
     elemPreset: down.elementPreset,
     params: down.params,
+    basicCfg: down.basicConfig,
     old_p: down.old_password,
     new_p: down.new_password,
     ic: down.ic_enable,
@@ -549,6 +564,7 @@ watch(
     down.selectedGuides,
     down.elementPreset,
     down.params,
+    down.basicConfig,
     down.old_password,
     down.new_password,
     down.ic_enable,
@@ -644,6 +660,9 @@ function checkBodyIncomplete() {
     return null;
   }
   if (s === "params") {
+    if (isBasicConfig40.value) {
+      return validateBasicConfigForm(down.basicConfig);
+    }
     const rows = (down.params || []).filter((p) => String(p.guide || "").trim());
     if (!rows.length) return "请至少添加一行参数（标识 + 数据 Hex）";
     const emptyData = rows.filter((p) => !String(p.value_hex || "").trim());
@@ -713,9 +732,13 @@ function buildPayload() {
   } else if (s === "guides") {
     payload.guides = [...(down.selectedGuides || [])];
   } else if (s === "params") {
-    payload.params = (down.params || [])
-      .filter((p) => p.guide)
-      .map((p) => ({ guide: p.guide, value_hex: p.value_hex || "" }));
+    if (isBasicConfig40.value) {
+      payload.params = basicConfigFormToParams(down.basicConfig);
+    } else {
+      payload.params = (down.params || [])
+        .filter((p) => p.guide)
+        .map((p) => ({ guide: p.guide, value_hex: p.value_hex || "" }));
+    }
   } else if (s === "password") {
     payload.old_password = down.old_password;
     payload.new_password = down.new_password;
@@ -1278,7 +1301,73 @@ async function rtuSendHex() {
               </p>
             </template>
 
-            <!-- 40 / 42 改配置 -->
+            <!-- 40 修改基本配置：固定可编辑项 -->
+            <template v-else-if="schema === 'params' && isBasicConfig40">
+              <UFormField label="中心站地址（4 个，0=禁用）">
+                <div class="grid grid-cols-4 gap-1">
+                  <UInput
+                    v-for="(_, i) in down.basicConfig.centers"
+                    :key="i"
+                    v-model.number="down.basicConfig.centers[i]"
+                    type="number"
+                    min="0"
+                    max="255"
+                    :placeholder="`中心${i + 1}`"
+                  />
+                </div>
+              </UFormField>
+              <UFormField label="遥测站地址">
+                <UInput v-model="down.basicConfig.remote_addr" placeholder="0011223344" class="font-mono" />
+              </UFormField>
+              <UFormField label="主信道类型">
+                <USelect
+                  v-model="down.basicConfig.main_channel_type"
+                  :items="channelTypeItems"
+                  value-key="value"
+                  class="w-full"
+                />
+              </UFormField>
+              <div v-if="mainChannelType === 2" class="grid grid-cols-3 gap-2">
+                <UFormField label="主信道 IP" class="col-span-2">
+                  <UInput v-model="down.basicConfig.main_ip" placeholder="118.178.94.91" />
+                </UFormField>
+                <UFormField label="端口">
+                  <UInput v-model.number="down.basicConfig.main_port" type="number" min="1" max="65535" />
+                </UFormField>
+              </div>
+              <UFormField v-else-if="mainChannelType === 1" label="主信道短信号码">
+                <UInput v-model="down.basicConfig.main_phone" placeholder="013987654321" class="font-mono" />
+              </UFormField>
+              <UFormField
+                v-else-if="mainChannelType > 2"
+                label="主信道地址（Hex）"
+              >
+                <UInput
+                  v-model="down.basicConfig.main_addr_hex"
+                  placeholder="按信道类型填写地址 Hex"
+                  class="font-mono"
+                />
+              </UFormField>
+              <UFormField label="备用短信号码">
+                <UInput v-model="down.basicConfig.backup_phone" placeholder="013987654321" class="font-mono" />
+              </UFormField>
+              <UFormField label="工作方式">
+                <USelect
+                  v-model="down.basicConfig.work_mode"
+                  :items="workModeItems"
+                  value-key="value"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="采集要素">
+                <UInput model-value="降水量 + 水位1" disabled class="w-full" />
+              </UFormField>
+              <UFormField label="移动通信卡识别号">
+                <UInput v-model="down.basicConfig.device_id" placeholder="013012345678" class="font-mono" />
+              </UFormField>
+            </template>
+
+            <!-- 42 改运行参数 -->
             <template v-else-if="schema === 'params'">
               <p class="text-xs text-muted m-0">
                 每行一组：参数标识 + 数据 Hex（数据长度自动写入 info 字节）
