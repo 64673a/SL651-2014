@@ -56,7 +56,6 @@ const down = reactive({
   password: "A000",
   encoding: "hex_bcd",
   serial_no: 0,
-  body_hex: "",
   // 38
   // F4 默认：表 C.1 特定搭配 000000（DRH00）
   step_unit: "H",
@@ -127,7 +126,6 @@ function ensurePeriodDefaults() {
   }
 }
 
-const showAdvanced = ref(false);
 const hexRaw = ref("");
 /** 预览：完整帧 / 正文 / 结束符 / 解析 */
 const previewFrame = ref(null); // { hex, body_hex, end_flag, parsedText, error, spaced }
@@ -481,8 +479,6 @@ function structureKey() {
     pwd: down.password,
     encoding: down.encoding,
     sn: down.serial_no,
-    body: showAdvanced.value ? down.body_hex : "",
-    adv: showAdvanced.value,
     step_u: down.step_unit,
     step_v: down.step_value,
     guides: down.selectedGuides,
@@ -510,7 +506,6 @@ function structureKey() {
 /** 与后端 encoder 对齐的轻量校验；不通过则不请求接口 */
 function validateBuildParams() {
   if (mode.value === "hex") return null;
-  if (showAdvanced.value && String(down.body_hex || "").trim()) return null;
 
   const remote = String(down.remote_addr || "").replace(/\s+/g, "");
   if (!remote) return "请填写遥测站址";
@@ -557,8 +552,6 @@ watch(
     down.password,
     down.encoding,
     down.serial_no,
-    down.body_hex,
-    showAdvanced.value,
     down.step_unit,
     down.step_value,
     down.selectedGuides,
@@ -634,13 +627,6 @@ function selectClient(c) {
  * @returns {string|null} 不完整时的提示文案；完整返回 null
  */
 function checkBodyIncomplete() {
-  // 高级正文覆盖：只要填了 hex 即视为完整
-  if (showAdvanced.value && down.body_hex?.trim()) return null;
-
-  if (!down.remote_addr?.trim()) {
-    return "遥测站址未填写，正文/帧头可能不完整";
-  }
-
   const s = schema.value;
   if (s === "period") {
     const miss = [];
@@ -705,12 +691,6 @@ function buildPayload() {
     ? nowDateTime()
     : sendTimeDt.value || nowDateTime();
   payload.send_time = formatProtocolYmdHms(t);
-
-  // 高级覆盖
-  if (showAdvanced.value && down.body_hex?.trim()) {
-    payload.body_hex = down.body_hex.trim();
-    return payload;
-  }
 
   const s = schema.value;
   if (s === "period") {
@@ -1473,26 +1453,6 @@ async function rtuSendHex() {
                 "
               />
             </template>
-          </div>
-
-          <div>
-            <UButton
-              size="sm"
-              color="neutral"
-              variant="link"
-              :icon="showAdvanced ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-              @click="showAdvanced = !showAdvanced"
-            >
-              高级：正文 Hex 覆盖
-            </UButton>
-            <UFormField v-if="showAdvanced" label="正文 Hex" hint="非空则覆盖自动生成">
-              <UTextarea
-                v-model="down.body_hex"
-                :rows="3"
-                placeholder="可选，如 0001240109160128"
-                class="w-full font-mono text-xs"
-              />
-            </UFormField>
           </div>
 
           <UAlert
