@@ -22,9 +22,12 @@
 python3 main.py web --port 8080 --tcp-port 9000   # 终端 1
 cd web && npm install && npm run dev               # 终端 2 → http://127.0.0.1:5173
 
-# 构建到 sl651/static（生产 / Docker 使用）
-cd web && npm run build
+# 非 Docker 本机跑后端时，需先构建静态页到 sl651/static/
+cd web && npm install && npm run build
+python3 main.py web --port 8080 --tcp-port 9000
 ```
+
+`sl651/static/` 为 Vite 构建产物，**已加入 `.gitignore`，不要提交**。Docker / `deploy.sh` 会在镜像内执行 `vite build`，部署不必依赖仓库里的 static。本地改完 `web/` 后若直接用 `python3 main.py web`（非 Vite 开发服），记得先 `npm run build`。
 
 数据库默认路径：`data/messages.db`，可用环境变量 `SL651_DB` 覆盖。
 
@@ -120,9 +123,10 @@ sl651/
   bus.py         # 报文事件总线
   rtu.py         # 模拟 RTU
   webapp.py      # FastAPI + WS
-  static/        # Web 前端
+  static/        # Web 前端构建产物（gitignore，本地/镜像内生成）
   cli.py
 main.py
+web/             # Vue 源码
 ```
 
 ## API 摘要
